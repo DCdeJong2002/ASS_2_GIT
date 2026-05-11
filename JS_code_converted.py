@@ -34,9 +34,7 @@ import matplotlib.pyplot as plt
 # ── locate the polar file ────────────────────────────────────────────────────
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _POLAR_CANDIDATES = [
-    os.path.join(_SCRIPT_DIR, "polar_DU95W180__3_.xlsx"),
-    "/mnt/user-data/uploads/polar_DU95W180__3_.xlsx",
-    "polar_DU95W180__3_.xlsx",
+    os.path.join(_SCRIPT_DIR, "polar DU95W180 (3).xlsx"),
 ]
 
 # ============================================================
