@@ -1,0 +1,157 @@
+\subsection{Biot--Savart law and the straight vortex filament}
+\label{sec:biot-savart}
+
+The lifting line model treats the flow as inviscid, irrotational and incompressible everywhere except on a set of vortex filaments, so the induced velocity field is fully determined by the Biot--Savart law. For a generic vorticity distribution $\vec{\omega}$ contained in a volume $V$, the velocity at a point $\vec{x}_p$ is
+\begin{equation}
+\vec{u}_\omega(\vec{x}_p) = \frac{1}{4\pi}\int_V \frac{\vec{\omega}\times\vec{r}}{|\vec{r}|^3}\,\mathrm{d}V,
+\qquad \vec{r}=\vec{x}_p-\vec{x},
+\label{eq:biot-savart-volume}
+\end{equation}
+which, when the vorticity is concentrated along a curve carrying constant circulation $\Gamma$, reduces to the curve integral
+\begin{equation}
+\vec{u}_\omega(\vec{x}_p) = \frac{\Gamma}{4\pi}\int_a^b \frac{\mathrm{d}\vec{l}\times\vec{r}}{|\vec{r}|^3}.
+\label{eq:biot-savart-line}
+\end{equation}
+For a \emph{straight} segment between endpoints $\vec{X}_1$ and $\vec{X}_2$, with $\vec{R}_1=\vec{x}_p-\vec{X}_1$ and $\vec{R}_2=\vec{x}_p-\vec{X}_2$, equation~\eqref{eq:biot-savart-line} integrates in closed form to the Katz \& Plotkin expression
+\begin{equation}
+\vec{u}_\omega \;=\; \frac{\Gamma}{4\pi}\,\frac{\vec{R}_1\times\vec{R}_2}{|\vec{R}_1\times\vec{R}_2|^2}
+\left[\frac{(\vec{X}_2-\vec{X}_1)\!\cdot\!\vec{R}_1}{|\vec{R}_1|}
+-\frac{(\vec{X}_2-\vec{X}_1)\!\cdot\!\vec{R}_2}{|\vec{R}_2|}\right].
+\label{eq:katz-plotkin}
+\end{equation}
+It is convenient to factor out the scalar prefactor
+\begin{equation}
+K \;=\; \frac{\Gamma}{4\pi\,|\vec{R}_1\times\vec{R}_2|^2}
+\left[\frac{(\vec{X}_2-\vec{X}_1)\!\cdot\!\vec{R}_1}{|\vec{R}_1|}
+-\frac{(\vec{X}_2-\vec{X}_1)\!\cdot\!\vec{R}_2}{|\vec{R}_2|}\right],
+\label{eq:K-scalar}
+\end{equation}
+so that the three Cartesian components of the induced velocity are
+\begin{align}
+U &= K\,\bigl(R_{1y}R_{2z}-R_{1z}R_{2y}\bigr), \nonumber\\
+V &= K\,\bigl(R_{1z}R_{2x}-R_{1x}R_{2z}\bigr), \label{eq:UVW-components}\\
+W &= K\,\bigl(R_{1x}R_{2y}-R_{1y}R_{2x}\bigr). \nonumber
+\end{align}
+Equation~\eqref{eq:katz-plotkin} is singular as $\vec{x}_p$ approaches the filament, where $|\vec{R}_1\times\vec{R}_2|\to 0$. To avoid the unphysical $1/r$ blow-up, a vortex core of radius $r_{\text{core}}$ is introduced: whenever the perpendicular distance from $\vec{x}_p$ to the filament falls below $r_{\text{core}}$, the induction is set to zero (or, equivalently, replaced by a solid-body rotation profile). Physically, this regularises the inviscid singularity that a real viscous core would smooth out, and it prevents control points near a filament from poisoning the influence matrix.
+
+\subsection{Horseshoe vortex discretisation of the blade}
+\label{sec:horseshoe}
+
+The blade is collapsed onto its quarter-chord line, divided into $N$ spanwise segments, and each segment carries one \emph{horseshoe vortex} of constant strength $\Gamma_j$: a bound segment along the $c/4$ line and two trailing legs that convect downstream into the wake. The control point at which the airfoil-polar boundary condition is enforced is placed at the $3c/4$ position of the segment. This c/4--3c/4 placement is justified by Pistolesi's theorem: for an isolated 2D thin airfoil, requiring zero normal velocity at the $3c/4$ point with a single bound vortex at the $c/4$ exactly recovers the thin-airfoil result $\Gamma=\pi U_\infty c\sin\alpha$. Two adjacent horseshoes share a trailing leg whose net circulation is the difference $\Gamma_{j+1}-\Gamma_j$ of their bound circulations; summing over the span this automatically enforces Helmholtz's theorem in the discrete form
+\begin{equation}
+\frac{\partial \Gamma_{\text{trailed}}}{\partial r} \;=\; -\frac{\mathrm{d}\Gamma}{\mathrm{d}r},
+\label{eq:helmholtz-discrete}
+\end{equation}
+without any additional bookkeeping in the code.
+
+\subsection{Frozen helical wake geometry}
+\label{sec:frozen-wake}
+
+In the frozen-wake model the wake geometry is prescribed once and held fixed throughout the iteration. Every trailing filament leaving a spanwise station at radius $r$ is laid out as a perfect helix
+\begin{align}
+x_w(t,r) &= U_{\text{wake}}\,t, \label{eq:wake-x}\\
+y_w(t,r) &= r\sin(\Omega t + \psi_0), \label{eq:wake-y}\\
+z_w(t,r) &= r\cos(\Omega t + \psi_0), \label{eq:wake-z}
+\end{align}
+where $t\geq 0$ is the time elapsed since the filament was shed, $\psi_0$ is the azimuthal phase of the originating blade, $\Omega$ is the rotor angular velocity, and the convection velocity is
+\begin{equation}
+U_{\text{wake}} \;=\; U_\infty\,(1-a_w).
+\label{eq:U-wake}
+\end{equation}
+The parameter $a_w$ is an \emph{assumed} wake-average axial induction factor: it captures the fact that, by extracting energy, the rotor decelerates the flow so the wake is convected at less than the freestream speed. Choosing $a_w$ a priori is a modelling decision because the true wake convection is itself part of the solution; the present model decouples this feedback to keep the induction problem linear and reduce its size from $\mathcal{O}(N^2)$ to $\mathcal{O}(N)$. The sensitivity of the rotor loading to $a_w$ is therefore one of the parametric studies of this assignment.
+
+\subsection{Influence matrix formulation}
+\label{sec:influence-matrix}
+
+Because the Biot--Savart law~\eqref{eq:katz-plotkin} is linear in $\Gamma$, the velocity at any control point $i$ is a linear combination of all unknown horseshoe strengths $\Gamma_j$. Pre-computing the velocity induced at $\vec{x}_{cp,i}$ by horseshoe $j$ \emph{evaluated with unit circulation} therefore produces three geometry-only matrices $[\mathbf{U}]$, $[\mathbf{V}]$, $[\mathbf{W}]$ of size $N\times N$ such that the full induced velocity vector at all control points follows from a single matrix--vector product per component,
+\begin{equation}
+\vec{u}_{\text{ind}} = [\mathbf{U}]\,\vec{\Gamma},\qquad
+\vec{v}_{\text{ind}} = [\mathbf{V}]\,\vec{\Gamma},\qquad
+\vec{w}_{\text{ind}} = [\mathbf{W}]\,\vec{\Gamma}.
+\label{eq:influence-matrix}
+\end{equation}
+Because the wake is frozen, $[\mathbf{U}],[\mathbf{V}],[\mathbf{W}]$ depend only on the geometry of the bound vortex and the helical filaments and are computed once before the non-linear iteration.
+
+\subsection{Velocities and loads at a blade section}
+\label{sec:velocities-loads}
+
+At each control point, the perceived velocity has three contributions: the freestream, the rotational velocity of the rotating frame, and the induced velocity from the entire vortex system. With $\hat{n}_{\text{ax}}$ aligned with the freestream and $\hat{n}_{\text{azim}}$ tangent to the rotation,
+\begin{align}
+V_{\text{axial}} &= U_\infty + \vec{u}_{\text{ind}}\!\cdot\!\hat{n}_{\text{ax}}, \label{eq:V-axial}\\
+V_{\text{tan}} &= \Omega r + \vec{u}_{\text{ind}}\!\cdot\!\hat{n}_{\text{azim}}, \label{eq:V-tan}\\
+V_p &= \sqrt{V_{\text{axial}}^2 + V_{\text{tan}}^2}. \label{eq:V-p}
+\end{align}
+The local inflow angle and angle of attack follow as
+\begin{equation}
+\Phi = \arctan\!\left(\frac{V_{\text{axial}}}{V_{\text{tan}}}\right),
+\qquad
+\alpha = \Phi - \beta_{\text{twist}}(r) - \theta_{\text{pitch}},
+\label{eq:phi-alpha}
+\end{equation}
+where $\beta_{\text{twist}}$ is the local geometric twist and $\theta_{\text{pitch}}$ the collective pitch. The 2D loads per unit span are obtained from the airfoil polar,
+\begin{align}
+L &= \tfrac{1}{2}\rho V_p^2\,c\,C_l(\alpha), \label{eq:lift}\\
+D &= \tfrac{1}{2}\rho V_p^2\,c\,C_d(\alpha), \label{eq:drag}
+\end{align}
+and projected onto the rotor axes,
+\begin{align}
+F_{\text{axial}} &= L\cos\Phi + D\sin\Phi, \label{eq:F-axial}\\
+F_{\text{azim}}  &= L\sin\Phi - D\cos\Phi. \label{eq:F-azim}
+\end{align}
+The closure between the vortex system and the airfoil aerodynamics is provided by Kutta--Joukowski applied to the bound segment,
+\begin{equation}
+\Gamma \;=\; \tfrac{1}{2}\,c\,V_p\,C_l(\alpha).
+\label{eq:gamma-closure}
+\end{equation}
+Drag does not enter~\eqref{eq:gamma-closure} (Kutta--Joukowski is a $C_l$-only relation) but contributes to thrust and torque through equations~\eqref{eq:F-axial}--\eqref{eq:F-azim}.
+
+\subsection{Induction factors}
+\label{sec:induction-factors}
+
+The axial and tangential induction factors used to compare with BEM are recovered directly from the induced velocity components at each control point,
+\begin{equation}
+a = -\,\frac{u_{\text{ind,axial}}}{U_\infty},
+\qquad
+a' = \frac{u_{\text{ind,azim}}}{\Omega r}.
+\label{eq:induction-factors}
+\end{equation}
+The minus sign in the axial definition follows the wind-turbine sign convention: the rotor decelerates the flow, so the axial induced velocity is opposite to the freestream ($u_{\text{ind,axial}}<0$) and $a>0$ for a turbine extracting energy.
+
+\subsection{Iterative solution procedure}
+\label{sec:iteration}
+
+Because the right-hand side of~\eqref{eq:gamma-closure} depends on $V_p$ and $\alpha$, which themselves depend on $\Gamma$ via~\eqref{eq:influence-matrix}, the system is non-linear and is solved by fixed-point iteration with under-relaxation. The procedure is summarised in Algorithm~\ref{alg:lifting-line}.
+
+\begin{algorithm}[H]
+\SetAlgoLined
+\KwIn{Blade geometry, airfoil polar $C_l(\alpha)$, $C_d(\alpha)$, $U_\infty$, $\Omega$, assumed $a_w$, relaxation weight $w\approx 0.3$, tolerance $\epsilon$}
+\KwOut{Converged spanwise circulation $\{\Gamma_j\}_{j=1}^N$}
+Build helical wake using~\eqref{eq:wake-x}--\eqref{eq:U-wake}\;
+Pre-compute influence matrices $[\mathbf{U}],[\mathbf{V}],[\mathbf{W}]$ from~\eqref{eq:katz-plotkin}\;
+Initialise $\vec{\Gamma}^{(0)} \leftarrow \vec{0}$\;
+\For{$k = 0,1,2,\dots,k_{\max}$}{
+  $\vec{u}_{\text{ind}} \leftarrow [\mathbf{U}]\vec{\Gamma}^{(k)}$, $\vec{v}_{\text{ind}} \leftarrow [\mathbf{V}]\vec{\Gamma}^{(k)}$, $\vec{w}_{\text{ind}} \leftarrow [\mathbf{W}]\vec{\Gamma}^{(k)}$\;
+  Compute $V_{\text{axial}},V_{\text{tan}},V_p$ from~\eqref{eq:V-axial}--\eqref{eq:V-p}\;
+  Compute $\Phi,\alpha$ from~\eqref{eq:phi-alpha}\;
+  Look up $C_l(\alpha_j),C_d(\alpha_j)$ for $j=1,\dots,N$\;
+  $\Gamma_j^{\text{new}} \leftarrow \tfrac{1}{2}c_j V_{p,j} C_l(\alpha_j)$\quad\eqref{eq:gamma-closure}\;
+  $\vec{\Gamma}^{(k+1)} \leftarrow (1-w)\,\vec{\Gamma}^{(k)} + w\,\vec{\Gamma}^{\text{new}}$\;
+  \If{$\displaystyle\frac{\max_j|\Gamma_j^{(k+1)}-\Gamma_j^{(k)}|}{\max_j|\Gamma_j^{(k+1)}|}<\epsilon$}{
+    \textbf{break}\;
+  }
+}
+\caption{Frozen-wake lifting line iteration.}
+\label{alg:lifting-line}
+\end{algorithm}
+
+\subsection{Non-dimensionalisation}
+\label{sec:nondim}
+
+The plots required by the assignment are reported in non-dimensional form. The radial coordinate is $r/R$. The induction factors $a,a'$ from~\eqref{eq:induction-factors} are already dimensionless. The remaining quantities are made non-dimensional as
+\begin{align}
+\hat{\Gamma} &= \Gamma\,\frac{N_b\,\Omega}{\pi\,U_\infty^{2}}, \label{eq:gamma-hat}\\
+\hat{F}      &= \frac{F}{\tfrac{1}{2}\rho U_\infty^{2}\,R}, \label{eq:F-hat}\\
+C_T          &= \frac{T}{\tfrac{1}{2}\rho U_\infty^{2}\,\pi R^{2}}, \label{eq:CT}\\
+C_P          &= \frac{P}{\tfrac{1}{2}\rho U_\infty^{3}\,\pi R^{2}}. \label{eq:CP}
+\end{align}
+The scaling of $\hat{\Gamma}$ in~\eqref{eq:gamma-hat} collapses circulation distributions across tip-speed ratios to an order-unity quantity, isolating the geometric blade-loading shape from the operating-point magnitude. The force scaling $\hat{F}$ in~\eqref{eq:F-hat} normalises the spanwise loading by the freestream dynamic pressure times the rotor radius, so that the area under $\hat{F}_{\text{axial}}(r/R)$ is directly proportional to $C_T$. Finally, $C_T$ and $C_P$ measure the thrust and the extracted shaft power against the kinetic energy flux through the rotor disc area, providing the standard performance metrics for direct comparison against BEM.
