@@ -21,8 +21,39 @@ Run:  python BEM_FINAL.py
 import os, sys, io
 import numpy as np
 import pandas as pd
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 from scipy.optimize import minimize, root_scalar
+import seaborn as sns
+
+# =============================================================================
+# GLOBAL PLOT STYLE
+# =============================================================================
+
+mpl.rcParams.update({
+    "text.usetex": False,
+    "font.family": "serif",
+    "font.serif": ["CMU Serif", "Computer Modern Roman", "Latin Modern Roman", "DejaVu Serif"],
+    "mathtext.fontset": "cm",
+
+    "axes.labelsize": 12,
+    "legend.fontsize": 10,
+    "xtick.labelsize": 10,
+    "ytick.labelsize": 10,
+    "axes.titlesize": 12,
+
+    "savefig.bbox": "tight",
+    "savefig.pad_inches": 0.02,
+
+    "legend.frameon": True,
+})
+
+# Seaborn colorblind palette (8 colours)
+_CB_PALETTE = sns.color_palette("colorblind", 8)
+# Named hex strings for convenience
+_CB_HEX = [mpl.colors.to_hex(c) for c in _CB_PALETTE]
 
 # =============================================================================
 # 0.  CONFIGURATION
@@ -34,7 +65,7 @@ N_STARTS   = 12
 
 # ── Two separate TSR sweeps ───────────────────────────────────────────────────
 # TSR_SWEEP_SPAN   : used for all spanwise plots (4.1-4.3, 5, 6, 7, 8)
-#                    3 values -> black, green, red line colors
+#                    3 values -> first 3 colours of colorblind palette
 # TSR_SWEEP_PERF   : used for CT/CQ/CP vs TSR performance curves (4.4)
 #                    can be as wide as desired
 TSR_SWEEP_SPAN = [6, 8, 10]
@@ -68,35 +99,28 @@ SHOW_PLOTS = False   # False -> save and close immediately (non-interactive)
                      # True  -> plt.show() after each save
 
 # ── Computations ─────────────────────────────────────────────────────────────
-RUN_TSR_SWEEP_SPAN  = True   # spanwise BEM for TSR_SWEEP_SPAN
-                              #   required by: PLOT_4_1..4_3, PLOT_5, PLOT_6, PLOT_7
-RUN_TSR_SWEEP_PERF  = True   # performance sweep for TSR_SWEEP_PERF
-                              #   required by: PLOT_4_4
-RUN_NO_CORRECTION   = True   # F=1 run at TSR=8
-                              #   required by: PLOT_5
-RUN_ANALYTICAL      = True   # analytical optimum via Brent root-finder
-                              #   required by: PLOT_8, PLOT_9, PLOT_10
-RUN_CUBIC           = True   # cubic polynomial optimiser
-                              #   required by: PLOT_8
-RUN_QUARTIC         = True   # quartic polynomial optimiser
-                              #   required by: PLOT_8
+RUN_TSR_SWEEP_SPAN  = True
+RUN_TSR_SWEEP_PERF  = True
+RUN_NO_CORRECTION   = True
+RUN_ANALYTICAL      = True
+RUN_CUBIC           = True
+RUN_QUARTIC         = True
 
 # ── Plots ─────────────────────────────────────────────────────────────────────
-PLOT_4_1 = True   # alpha and inflow angle vs r/R        (requires RUN_TSR_SWEEP_SPAN)
-PLOT_4_2 = True   # axial and tangential induction vs r/R (requires RUN_TSR_SWEEP_SPAN)
-PLOT_4_3 = True   # Cn and Ct loading vs r/R              (requires RUN_TSR_SWEEP_SPAN)
-PLOT_4_4 = True   # CT, CQ, CP vs TSR  (broad sweep)      (requires RUN_TSR_SWEEP_PERF)
-PLOT_5   = True   # tip correction influence               (requires RUN_TSR_SWEEP_SPAN
-                  #                                         and RUN_NO_CORRECTION)
-PLOT_6   = True   # annuli count, spacing, convergence     (requires RUN_TSR_SWEEP_SPAN)
-PLOT_7   = True   # stagnation pressure                    (requires RUN_TSR_SWEEP_SPAN)
-PLOT_8   = True   # design comparison                      (requires relevant RUN_* flags)
-PLOT_9   = True   # Cl and chord relation                  (requires RUN_ANALYTICAL)
-PLOT_10  = True   # Cl/Cd polar with operating points      (requires RUN_ANALYTICAL)
+PLOT_4_1 = True
+PLOT_4_2 = True
+PLOT_4_3 = True
+PLOT_4_4 = True
+PLOT_5   = True
+PLOT_6   = True
+PLOT_7   = True
+PLOT_8   = True
+PLOT_9   = True
+PLOT_10  = True
 
 # ── Save ─────────────────────────────────────────────────────────────────────
-SAVE_BEM_RESULTS = True   # write bem_results.npz  (sweeps, tip correction, convergence)
-SAVE_OPT_RESULTS = True   # write opt_results.npz  (baseline + all optimiser designs)
+SAVE_BEM_RESULTS = True
+SAVE_OPT_RESULTS = True
 
 # =============================================================================
 # 1.  POLAR DATA
@@ -108,32 +132,33 @@ polar_cl    = _df["Cl"].to_numpy()
 polar_cd    = _df["Cd"].to_numpy()
 
 # =============================================================================
-# 2.  COLOR SCHEME
+# 2.  COLOR SCHEME  (seaborn colorblind palette)
 # =============================================================================
 #
-# Spanwise sweep lines (3 values: 6, 8, 10): black, green, red.
-# More values: extended colorblind-safe palette.
-# Design comparison: fixed color per label (3 designs: green/blue/red,
-#                                           4 designs: blue/green/red/orange).
-
-_TSR_3_COLORS   = ["#0000FF", "#2ca02c", "#d62728"]
-_TSR_MANY_COLORS = ["#000000","#2ca02c","#d62728","#1f77b4",
-                    "#ff7f0e","#9467bd","#8c564b","#e377c2"]
+# Spanwise sweep lines (up to 8 TSR values): drawn from _CB_PALETTE in order.
+# Performance sweep single-line plots: fixed indices into _CB_PALETTE.
+# Design comparison: fixed colour per label.
 
 def _tsr_color(idx, n):
-    return _TSR_3_COLORS[idx % 3] if n <= 3 else _TSR_MANY_COLORS[idx % len(_TSR_MANY_COLORS)]
+    """Colour for the idx-th TSR line (up to 8)."""
+    return _CB_HEX[idx % len(_CB_HEX)]
 
-_DESIGN_COLORS_3 = {
-    "Baseline":     "#000000",   # black
-    "Analytical":   "#2ca02c",   # green
-    "Cubic poly":   "#FF0000",   # red
-    "Quartic poly": "#0000FF",   # blue
+# Design comparison colours — taken from colorblind palette
+_DESIGN_COLOR_MAP = {
+    "Baseline":     _CB_HEX[0],   # blue
+    "Analytical":   _CB_HEX[1],   # orange
+    "Cubic poly":   _CB_HEX[2],   # green
+    "Quartic poly": _CB_HEX[3],   # red
 }
-_DESIGN_COLORS_4 = _DESIGN_COLORS_3.copy()
 
-def _design_color(label, n):
-    d = _DESIGN_COLORS_3 if n <= 3 else _DESIGN_COLORS_4
-    return d.get(label, "#888888")
+def _design_color(label, n=None):
+    return _DESIGN_COLOR_MAP.get(label, _CB_HEX[4])
+
+# Annuli sensitivity palette (6 levels, blue→red progression from colorblind set)
+_ANNULI_COLS = [_CB_HEX[i] for i in [0, 1, 2, 3, 4, 5]]
+
+# Spacing comparison
+_SPACING_COLS = {"Constant": _CB_HEX[0], "Cosine": _CB_HEX[1]}
 
 # =============================================================================
 # 3.  BEM CORE FUNCTIONS
@@ -283,7 +308,6 @@ if RUN_TSR_SWEEP_SPAN:
     F_tsr8=np.array([max(prandtl(rmid_R[i],RootLocation_R,TipLocation_R,
                                   Omega*Radius/U0,NBlades,results_tsr8[i,0]),1e-4)
                      for i in range(len(rmid_R))])
-    # Store TSR=8 result in sweep_data_span too (it may already be there)
     sweep_data_span[8] = results_tsr8
 
 # Performance sweep (wide range)
@@ -398,21 +422,21 @@ def _make_objective(quartic):
         if c_min<CHORD_MIN*0.5: return 1e9
         r,c,tw=build_poly_geometry(params); CT,CP,_=evaluate_rotor(r,c,tw)
         pen+=3e3*(CT-CT_TARGET)**2
-        if quartic: _,_,_,t_curve,_,c2,c3,c4=params; pen+=0.001*t_curve**2+0.0005*(c2**2+c3**2+c4**2) #objective function quartic
-        else:       _,_,_,t_curve,_,c2,c3=params;    pen+=0.05*t_curve**2+0.01*(c2**2+c3**2) #objective function cubic
+        if quartic: _,_,_,t_curve,_,c2,c3,c4=params; pen+=0.001*t_curve**2+0.0005*(c2**2+c3**2+c4**2)
+        else:       _,_,_,t_curve,_,c2,c3=params;    pen+=0.05*t_curve**2+0.01*(c2**2+c3**2)
         return -CP+pen
     return obj
 
 def run_poly_optimizer(quartic=False,n_starts=N_STARTS,seed=42):
     rng=np.random.default_rng(seed); obj=_make_objective(quartic); label="quartic" if quartic else "cubic"
     if quartic:
-        bounds=[(-5,5),(-25,5),(-10,15),(-20,20),(0.3,2),(-3,3),(-3,3),(-3,3)] #parameter bounds quartic
+        bounds=[(-5,5),(-25,5),(-10,15),(-20,20),(0.3,2),(-3,3),(-3,3),(-3,3)]
         x0_nom=np.array([-2,-7,2,0,1,0,0,0],dtype=float)
         def _rand(): return np.array([rng.uniform(-6,6),rng.uniform(-20,0),rng.uniform(-5,10),
                                        rng.uniform(-10,10),rng.uniform(0.3,1.5),
                                        rng.uniform(-3,3),rng.uniform(-3,3),rng.uniform(-3,3)])
     else:
-        bounds=[(-5,5),(-25,5),(-10,15),(-20,20),(0.3,2),(-3,3),(-3,3)] #parameter bounds cubic
+        bounds=[(-5,5),(-25,5),(-10,15),(-20,20),(0.3,2),(-3,3),(-3,3)]
         x0_nom=np.array([-2,-7,2,0,1,0,0],dtype=float)
         def _rand(): return np.array([rng.uniform(-6,6),rng.uniform(-20,0),rng.uniform(-5,10),
                                        rng.uniform(-10,10),rng.uniform(0.3,1.5),
@@ -470,12 +494,13 @@ if RUN_QUARTIC:    print(f"  Quartic poly   CT={CT_qrt:.6f}  CP={CP_qrt:.6f}  CP
 # 10.  PLOTS
 # =============================================================================
 
-save_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plots_assignment")
+save_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), "BEM_plots")
 os.makedirs(save_folder, exist_ok=True)
 
 def save_fig(name):
-    plt.savefig(os.path.join(save_folder, name), dpi=300, bbox_inches="tight")
-    print(f"  Saved: {name}")
+    pdf_name = os.path.splitext(name)[0] + ".pdf"
+    plt.savefig(os.path.join(save_folder, pdf_name), dpi=300, bbox_inches="tight", format="pdf")
+    print(f"  Saved: {pdf_name}")
     if SHOW_PLOTS: plt.show()
     else:          plt.close()
 
@@ -485,8 +510,8 @@ n_span   = len(TSR_SWEEP_SPAN)
 # ── 4.1  Alpha and inflow angle ───────────────────────────────────────────────
 if PLOT_4_1 and sweep_data_span:
     for col_idx, (qty_col, ylabel, fname) in enumerate([
-            (6, r"$\alpha$ [deg]", "4_1a_angle_of_attack_vs_rR.png"),
-            (7, r"$\phi$ [deg]",   "4_1b_inflow_angle_vs_rR.png")]):
+            (6, r"$\alpha$ [deg]", "4_1a_angle_of_attack_vs_rR"),
+            (7, r"$\phi$ [deg]",   "4_1b_inflow_angle_vs_rR")]):
         fig, ax = plt.subplots(figsize=(8,5))
         for k, TSR in enumerate(TSR_SWEEP_SPAN):
             res = sweep_data_span[TSR]
@@ -499,8 +524,8 @@ if PLOT_4_1 and sweep_data_span:
 # ── 4.2  Induction factors ────────────────────────────────────────────────────
 if PLOT_4_2 and sweep_data_span:
     for qty_col, ylabel, fname in [
-            (0, r"$a$ [-]",   "4_2a_axial_induction_vs_rR.png"),
-            (1, r"$a'$ [-]",  "4_2b_tangential_induction_vs_rR.png")]:
+            (0, r"$a$ [-]",   "4_2a_axial_induction_vs_rR"),
+            (1, r"$a'$ [-]",  "4_2b_tangential_induction_vs_rR")]:
         fig, ax = plt.subplots(figsize=(8,5))
         for k, TSR in enumerate(TSR_SWEEP_SPAN):
             res = sweep_data_span[TSR]
@@ -513,8 +538,8 @@ if PLOT_4_2 and sweep_data_span:
 # ── 4.3  Loading ──────────────────────────────────────────────────────────────
 if PLOT_4_3 and sweep_data_span:
     for qty_col, ylabel, fname in [
-            (3, r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$", "4_3a_normal_loading_Cn_vs_rR.png"),
-            (4, r"$C_t = F_t\,/\,(½\rho U_\infty^2 R)$", "4_3b_azimuthal_loading_Ct_vs_rR.png")]:
+            (3, r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$", "4_3a_normal_loading_Cn_vs_rR"),
+            (4, r"$C_t = F_t\,/\,(½\rho U_\infty^2 R)$", "4_3b_azimuthal_loading_Ct_vs_rR")]:
         fig, ax = plt.subplots(figsize=(8,5))
         for k, TSR in enumerate(TSR_SWEEP_SPAN):
             res = sweep_data_span[TSR]
@@ -531,12 +556,12 @@ if PLOT_4_4 and sweep_perf:
     CP_p  = [sweep_perf[t]["CP"] for t in tsr_p]
     CQ_p  = [sweep_perf[t]["CP"]/t for t in tsr_p]
 
-    for vals, ylabel, fname, color in [
-            (CT_p, r"$C_T$ [-]", "4_4a_thrust_coefficient_CT_vs_TSR.png", "blue"),
-            (CQ_p, r"$C_Q$ [-]", "4_4b_torque_coefficient_CQ_vs_TSR.png", "red"),
-            (CP_p, r"$C_P$ [-]", "4_4c_power_coefficient_CP_vs_TSR.png", "green")]:
+    for vals, ylabel, fname, cb_idx in [
+            (CT_p, r"$C_T$ [-]", "4_4a_thrust_coefficient_CT_vs_TSR",  0),
+            (CQ_p, r"$C_Q$ [-]", "4_4b_torque_coefficient_CQ_vs_TSR",  3),
+            (CP_p, r"$C_P$ [-]", "4_4c_power_coefficient_CP_vs_TSR",   2)]:
         fig, ax = plt.subplots(figsize=(7,5))
-        ax.plot(tsr_p, vals, "o-", color=color, lw=2)
+        ax.plot(tsr_p, vals, "o-", color=_CB_HEX[cb_idx], lw=2)
         ax.set_xlabel(r"Tip-speed ratio $\lambda$ [-]"); ax.set_ylabel(ylabel)
         ax.grid(True)
         fig.tight_layout(); save_fig(fname)
@@ -545,13 +570,13 @@ if PLOT_4_4 and sweep_perf:
 if PLOT_5 and results_tsr8 is not None and res_nc is not None:
     r_R8 = results_tsr8[:,2]
     for qty_col, ylabel, fname in [
-            (0, r"$a$ [-]",    "5a_axial_induction_tip_correction_comparison.png"),
-            (3, r"$C_n$ [-]",  "5b_normal_loading_tip_correction_comparison.png")]:
+            (0, r"$a$ [-]",    "5a_axial_induction_tip_correction_comparison"),
+            (3, r"$C_n$ [-]",  "5b_normal_loading_tip_correction_comparison")]:
         fig, ax = plt.subplots(figsize=(8,5))
         yc = results_tsr8[:,qty_col] if qty_col==0 else results_tsr8[:,qty_col]/norm_val
         ync= res_nc[:,0]             if qty_col==0 else res_nc[:,3]/norm_val
-        ax.plot(r_R8,       yc,  "b-",  lw=2, label="With Prandtl correction")
-        ax.plot(res_nc[:,2],ync, "r--", lw=2, label="No correction (F=1)")
+        ax.plot(r_R8,       yc,  color=_CB_HEX[0], lw=2, label="With Prandtl correction")
+        ax.plot(res_nc[:,2],ync, color=_CB_HEX[3], lw=2, linestyle="--", label="No correction (F=1)")
         ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
         ax.legend(); ax.grid(True)
         fig.tight_layout(); save_fig(fname)
@@ -559,30 +584,13 @@ elif PLOT_5:
     print("  [SKIP] PLOT_5 — requires RUN_TSR_SWEEP_SPAN and RUN_NO_CORRECTION")
 
 # ── 6  Annuli sensitivity + spacing study ────────────────────────────────────
-#
-#  Annuli study: N = [4, 8, 16, 32, 64, 160]  (log-spaced, TSR=8)
-#    160 is the production grid (DELTA_R_R=0.005) used as reference.
-#    Plots: Cn, Ct, a, alpha vs r/R; CT and CP vs N; tip-region Cn zoom.
-#
-#  Spacing study: N = 20  
-#    Plots: Cn, Ct, a, alpha vs r/R (full span + tip zoom for Cn).
-#
 if PLOT_6 and results_tsr8 is not None:
 
-    # ── palette ──────────────────────────────────────────────────────────────
-    # 6 annuli counts: 
-    _ANNULI_N   = [4, 8, 16, 32, 64, 160]
-    _ANNULI_COLS = ["#08306b","#2171b5","#6baed6","#bdd7e7","#fd8d3c","#d62728"]
-
-    #_ANNULI_N   = [4, 8, 16, 32, 64, 80, 100, 120, 140, 160]
-    #_ANNULI_COLS = ["#08306b","#2171b5","#6baed6","#bdd7e7","#fd8d3c","#d62728", "#9467bd","#8c564b","#e377c2","#7f7f7f"]
-
-    # spacing:
-    _SPACING_COLS = {"Constant":"#000000","Cosine":"#2ca02c"}
-    N_SPACING = 20   # annuli for spacing comparison
+    _ANNULI_N    = [4, 8, 16, 32, 64, 160]
+    N_SPACING    = 20
 
     # ── pre-compute all annuli results ────────────────────────────────────────
-    annuli_data = {}   # N -> res array
+    annuli_data = {}
     for N in _ANNULI_N:
         b=np.linspace(RootLocation_R,TipLocation_R,N+1); rows=[]
         for i in range(N):
@@ -591,7 +599,6 @@ if PLOT_6 and results_tsr8 is not None:
             rows.append(row)
         annuli_data[N]=np.vstack(rows)
 
-    # ── pre-compute CT and CP scalars vs N ────────────────────────────────────
     annuli_CT={}; annuli_CP={}
     for N, res_N in annuli_data.items():
         b=np.linspace(RootLocation_R,TipLocation_R,N+1)
@@ -622,7 +629,7 @@ if PLOT_6 and results_tsr8 is not None:
                 color=_ANNULI_COLS[idx],lw=2,marker=mk,markersize=ms,label=f"N={N}")
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("6a1_Cn_vs_rR_annuli_sensitivity.png")
+    fig.tight_layout(); save_fig("6a1_Cn_vs_rR_annuli_sensitivity")
 
     # 6a2 — Ct vs r/R
     fig, ax = plt.subplots(figsize=(8,5))
@@ -632,7 +639,7 @@ if PLOT_6 and results_tsr8 is not None:
                 color=_ANNULI_COLS[idx],lw=2,marker=mk,markersize=ms,label=f"N={N}")
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_t = F_t\,/\,(½\rho U_\infty^2 R)$")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("6a2_Ct_vs_rR_annuli_sensitivity.png")
+    fig.tight_layout(); save_fig("6a2_Ct_vs_rR_annuli_sensitivity")
 
     # 6a3 — axial induction a vs r/R
     fig, ax = plt.subplots(figsize=(8,5))
@@ -642,7 +649,7 @@ if PLOT_6 and results_tsr8 is not None:
                 color=_ANNULI_COLS[idx],lw=2,marker=mk,markersize=ms,label=f"N={N}")
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$a$ [-]")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("6a3_axial_induction_vs_rR_annuli_sensitivity.png")
+    fig.tight_layout(); save_fig("6a3_axial_induction_vs_rR_annuli_sensitivity")
 
     # 6a4 — angle of attack alpha vs r/R
     fig, ax = plt.subplots(figsize=(8,5))
@@ -652,26 +659,26 @@ if PLOT_6 and results_tsr8 is not None:
                 color=_ANNULI_COLS[idx],lw=2,marker=mk,markersize=ms,label=f"N={N}")
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$\alpha$ [deg]")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("6a4_alpha_vs_rR_annuli_sensitivity.png")
+    fig.tight_layout(); save_fig("6a4_alpha_vs_rR_annuli_sensitivity")
 
     # 6a5 — CT vs N (global convergence)
     _N_list = list(annuli_CT.keys())
     fig, ax = plt.subplots(figsize=(7,5))
-    ax.plot(_N_list,[annuli_CT[n] for n in _N_list],"o-",color="#d62728",lw=2)
+    ax.plot(_N_list,[annuli_CT[n] for n in _N_list],"o-",color=_CB_HEX[3],lw=2)
     ax.axhline(annuli_CT[160],color="k",ls="--",lw=0.8,label=f"N=160 reference ({annuli_CT[160]:.4f})")
     ax.set_xlabel("Number of annuli N"); ax.set_ylabel(r"$C_T$ [-]")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("6a5_CT_vs_N_annuli_convergence.png")
+    fig.tight_layout(); save_fig("6a5_CT_vs_N_annuli_convergence")
 
     # 6a6 — CP vs N (global convergence)
     fig, ax = plt.subplots(figsize=(7,5))
-    ax.plot(_N_list,[annuli_CP[n] for n in _N_list],"o-",color="#2ca02c",lw=2)
+    ax.plot(_N_list,[annuli_CP[n] for n in _N_list],"o-",color=_CB_HEX[2],lw=2)
     ax.axhline(annuli_CP[160],color="k",ls="--",lw=0.8,label=f"N=160 reference ({annuli_CP[160]:.4f})")
     ax.set_xlabel("Number of annuli N"); ax.set_ylabel(r"$C_P$ [-]")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("6a6_CP_vs_N_annuli_convergence.png")
+    fig.tight_layout(); save_fig("6a6_CP_vs_N_annuli_convergence")
 
-    # 6a7 — Cn tip zoom (r/R > 0.85) showing resolution effect near tip
+    # 6a7 — Cn tip zoom (r/R > 0.85)
     fig, ax = plt.subplots(figsize=(8,5))
     for idx,(N,res_N) in enumerate(annuli_data.items()):
         mk="o" if N<=32 else None; ms=4 if N<=32 else None
@@ -680,7 +687,7 @@ if PLOT_6 and results_tsr8 is not None:
     ax.set_xlim(0.85,1.01)
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("6a7_Cn_tip_zoom_annuli_sensitivity.png")
+    fig.tight_layout(); save_fig("6a7_Cn_tip_zoom_annuli_sensitivity")
 
     # ══ SPACING COMPARISON PLOTS (N=20) ══════════════════════════════════════
 
@@ -691,7 +698,7 @@ if PLOT_6 and results_tsr8 is not None:
                 color=_SPACING_COLS[lbl],lw=2,label=lbl)
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("6b1_Cn_vs_rR_spacing_comparison.png")
+    fig.tight_layout(); save_fig("6b1_Cn_vs_rR_spacing_comparison")
 
     # 6b2 — Cn tip zoom
     fig, ax = plt.subplots(figsize=(8,5))
@@ -701,7 +708,7 @@ if PLOT_6 and results_tsr8 is not None:
     ax.set_xlim(0.85,1.01)
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("6b2_Cn_tip_zoom_spacing_comparison.png")
+    fig.tight_layout(); save_fig("6b2_Cn_tip_zoom_spacing_comparison")
 
     # 6b3 — Ct vs r/R
     fig, ax = plt.subplots(figsize=(8,5))
@@ -710,7 +717,7 @@ if PLOT_6 and results_tsr8 is not None:
                 color=_SPACING_COLS[lbl],lw=2,label=lbl)
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_t = F_t\,/\,(½\rho U_\infty^2 R)$")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("6b3_Ct_vs_rR_spacing_comparison.png")
+    fig.tight_layout(); save_fig("6b3_Ct_vs_rR_spacing_comparison")
 
     # 6b4 — axial induction a vs r/R
     fig, ax = plt.subplots(figsize=(8,5))
@@ -719,7 +726,7 @@ if PLOT_6 and results_tsr8 is not None:
                 color=_SPACING_COLS[lbl],lw=2,label=lbl)
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$a$ [-]")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("6b4_axial_induction_vs_rR_spacing_comparison.png")
+    fig.tight_layout(); save_fig("6b4_axial_induction_vs_rR_spacing_comparison")
 
     # 6b5 — angle of attack alpha vs r/R
     fig, ax = plt.subplots(figsize=(8,5))
@@ -728,103 +735,61 @@ if PLOT_6 and results_tsr8 is not None:
                 color=_SPACING_COLS[lbl],lw=2,label=lbl)
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$\alpha$ [deg]")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("6b5_alpha_vs_rR_spacing_comparison.png")
+    fig.tight_layout(); save_fig("6b5_alpha_vs_rR_spacing_comparison")
 
     # ══ ITERATION CONVERGENCE PLOTS ══════════════════════════════════════════
 
     # 6c — CT convergence history
     n_show=min(60,len(ct_hist_tsr8))
     fig, ax = plt.subplots(figsize=(8,5))
-    ax.plot(range(1,len(ct_hist_tsr8)+1),ct_hist_tsr8,"b-",lw=2)
+    ax.plot(range(1,len(ct_hist_tsr8)+1),ct_hist_tsr8,color=_CB_HEX[0],lw=2)
     ax.set_xlim(1,n_show); ax.set_xlabel("Iteration"); ax.set_ylabel(r"$C_T$ [-]")
-    ax.grid(True); fig.tight_layout(); save_fig("6c_CT_convergence_history.png")
+    ax.grid(True); fig.tight_layout(); save_fig("6c_CT_convergence_history")
 
     # 6d — residuals log scale
     resid=np.abs(np.diff(ct_hist_tsr8))
     fig, ax = plt.subplots(figsize=(8,5))
-    ax.semilogy(range(2,len(ct_hist_tsr8)+1),resid,"r-",lw=2,
+    ax.semilogy(range(2,len(ct_hist_tsr8)+1),resid,color=_CB_HEX[3],lw=2,
                 label=r"$|C_{T,i}-C_{T,i-1}|$")
     ax.axhline(1e-5,color="k",ls="--",lw=0.8,label="Tolerance = 1e-5")
     ax.set_xlim(1,n_show); ax.set_xlabel("Iteration"); ax.set_ylabel(r"$|\Delta C_T|$")
     ax.legend(); ax.grid(True,which="both")
-    fig.tight_layout(); save_fig("6d_CT_convergence_residuals_log_scale.png")
+    fig.tight_layout(); save_fig("6d_CT_convergence_residuals_log_scale")
 
 elif PLOT_6:
     print("  [SKIP] PLOT_6 — requires RUN_TSR_SWEEP_SPAN")
 
 
-# ── 7  Stagnation pressure ──────────────────────────────────────────────────────
+# ── 7  Stagnation pressure ─────────────────────────────────────────────────────
 if PLOT_7 and results_tsr8 is not None:
     r_R8 = results_tsr8[:,2]
     a_R8 = results_tsr8[:,0]
 
-    # Freestream dynamic pressure
-    q_inf = 0.5 * rho * U0**2
-
-    # Normalised stagnation pressures
-    P0_12 = np.ones(len(r_R8))
-    P0_34 = (1.0 - 2.0*a_R8)**2
-
-    # Dimensional
-    P0_up = q_inf * P0_12
+    q_inf   = 0.5 * rho * U0**2
+    P0_12   = np.ones(len(r_R8))
+    P0_34   = (1.0 - 2.0*a_R8)**2
+    P0_up   = q_inf * P0_12
     P0_down = q_inf * P0_34
+    eps     = 0.003 * q_inf
 
-    # Small offset to visually separate overlapping curves
-    eps = 0.003 * q_inf
-
-    # -------------------------------------------------------
-    # LEFT FIGURE: four stations with small offset 
-    # -------------------------------------------------------
+    # Left figure: four stations
     fig, ax = plt.subplots(figsize=(7,5))
+    ax.plot(r_R8, P0_up,       color=_CB_HEX[0], lw=2.5, label=r"$P_0^{\infty,\uparrow}$ (infinity upwind)")
+    ax.plot(r_R8, P0_down,     color=_CB_HEX[3], lw=2.5, label=r"$P_0^{\infty,\downarrow}$ (infinity downwind)")
+    ax.plot(r_R8, P0_up+eps,   color=_CB_HEX[7], lw=1.8, linestyle="--", alpha=0.95, label=r"$P_0^{+}$ (rotor upwind)")
+    ax.plot(r_R8, P0_down+eps, color=_CB_HEX[2], lw=1.8, linestyle="--", alpha=0.95, label=r"$P_0^{-}$ (rotor downwind)")
+    ax.set_xlabel("r/R"); ax.set_ylabel(r"$P_0$ [Pa]")
+    ax.grid(True); ax.legend(fontsize=8)
+    fig.tight_layout(); save_fig("7_stagnation_pressure_four_stations")
 
-    ax.plot(r_R8, P0_up, color="#0000FF", lw=2.5,
-        label=r"$P_0^{\infty,\uparrow}$ (infinity upwind)")
-
-    ax.plot(r_R8, P0_down, color="#FF0000", lw=2.5,
-            label=r"$P_0^{\infty,\downarrow}$ (infinity downwind)")
-
-    ax.plot(r_R8, P0_up+eps, color="#000000", lw=1.8, linestyle="--", alpha=0.95,
-            label=r"$P_0^{+}$ (rotor upwind)")
-
-    ax.plot(r_R8, P0_down+eps, color="#00AA00", lw=1.8, linestyle="--", alpha=0.95,
-            label=r"$P_0^{-}$ (rotor downwind)")
-
-    ax.set_xlabel("r/R")
-    ax.set_ylabel(r"$P_0$ [Pa]")
-    ax.grid(True)
-    ax.legend(fontsize=8)
-
-    fig.tight_layout()
-    save_fig("7_stagnation_pressure_four_stations.png")
-
-    # -------------------------------------------------------
-    # RIGHT FIGURE: 
-    # -------------------------------------------------------
+    # Right figure: normalised drop
     fig, ax = plt.subplots(figsize=(7,5))
-
-    ax.plot(r_R8, P0_12, color="#0000FF", lw=2.5,
-            label=r"Upstream $P_0/q_\infty = 1$")
-
-    ax.plot(r_R8, P0_34, color="#FF0000", lw=2.5,
-            label=r"Downstream $P_0/q_\infty = (1-2a)^2$")
-
-    # Shade stagnation pressure drop (energy extracted)
-    ax.fill_between(
-        r_R8,
-        P0_34,
-        P0_12,
-        color="#B0B0B0",
-        alpha=0.35,
-        label=r"$\Delta P_0$"
-    )
-
-    ax.set_xlabel("r/R")
-    ax.set_ylabel(r"$P_0/q_\infty$ [-]")
-    ax.grid(True)
-    ax.legend(fontsize=8)
-
-    fig.tight_layout()
-    save_fig("7_stagnation_pressure_drop.png")
+    ax.plot(r_R8, P0_12, color=_CB_HEX[0], lw=2.5, label=r"Upstream $P_0/q_\infty = 1$")
+    ax.plot(r_R8, P0_34, color=_CB_HEX[3], lw=2.5, label=r"Downstream $P_0/q_\infty = (1-2a)^2$")
+    ax.fill_between(r_R8, P0_34, P0_12, color=_CB_HEX[1], alpha=0.25, label=r"$\Delta P_0$")
+    ax.set_xlabel("r/R"); ax.set_ylabel(r"$P_0/q_\infty$ [-]")
+    ax.grid(True); ax.legend(fontsize=8)
+    fig.tight_layout(); save_fig("7_stagnation_pressure_drop")
 
 elif PLOT_7:
     print("  [SKIP] PLOT_7 — requires results_tsr8 to be run")
@@ -834,7 +799,6 @@ elif PLOT_7:
 if PLOT_8 and res_base is not None:
     r_R_d=np.linspace(RootLocation_R,TipLocation_R,400)
 
-    # Build designs list 
     designs=[("Baseline",
               np.interp(r_R_d,r_base/Radius,c_base),
               np.interp(r_R_d,r_base/Radius,tw_base),
@@ -859,25 +823,25 @@ if PLOT_8 and res_base is not None:
     # 8a — chord
     fig, ax = plt.subplots(figsize=(9,5))
     for lbl,c_d,*_ in designs:
-        ax.plot(r_R_d,c_d,color=_design_color(lbl,n_d),lw=2,label=lbl)
+        ax.plot(r_R_d,c_d,color=_design_color(lbl),lw=2,label=lbl)
     ax.axhline(CHORD_MIN,color="grey",ls=":",lw=1,label=f"Min chord  {CHORD_MIN} m")
     ax.axhline(CHORD_ROOT,color="k",ls="--",lw=0.8,label=f"Root chord  {CHORD_ROOT} m")
     ax.set_xlabel("r/R"); ax.set_ylabel("Chord [m]")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("8a_chord_distribution_design_comparison.png")
+    fig.tight_layout(); save_fig("8a_chord_distribution_design_comparison")
 
     # 8b — twist
     fig, ax = plt.subplots(figsize=(9,5))
     for lbl,_,tw_d,*_ in designs:
-        ax.plot(r_R_d,tw_d,color=_design_color(lbl,n_d),lw=2,label=lbl)
+        ax.plot(r_R_d,tw_d,color=_design_color(lbl),lw=2,label=lbl)
     ax.set_xlabel("r/R"); ax.set_ylabel("Twist [deg]")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("8b_twist_distribution_design_comparison.png")
+    fig.tight_layout(); save_fig("8b_twist_distribution_design_comparison")
 
     # 8ab — chord and twist combined
     fig, axes = plt.subplots(1,2,figsize=(14,5))
     for lbl,c_d,tw_d,*_ in designs:
-        col=_design_color(lbl,n_d)
+        col=_design_color(lbl)
         axes[0].plot(r_R_d,c_d,color=col,lw=2,label=lbl)
         axes[1].plot(r_R_d,tw_d,color=col,lw=2,label=lbl)
     axes[0].axhline(CHORD_MIN,color="grey",ls=":",lw=1,label=f"Min  {CHORD_MIN} m")
@@ -886,32 +850,32 @@ if PLOT_8 and res_base is not None:
     axes[0].legend(); axes[0].grid(True)
     axes[1].set_xlabel("r/R"); axes[1].set_ylabel("Twist [deg]")
     axes[1].legend(); axes[1].grid(True)
-    fig.tight_layout(); save_fig("8ab_chord_and_twist_design_comparison.png")
+    fig.tight_layout(); save_fig("8ab_chord_and_twist_design_comparison")
 
     # 8c — axial induction
     fig, ax = plt.subplots(figsize=(9,5))
     for lbl,_,_,res,*_ in designs:
-        ax.plot(res[:,2],res[:,0],color=_design_color(lbl,n_d),lw=2,label=lbl)
+        ax.plot(res[:,2],res[:,0],color=_design_color(lbl),lw=2,label=lbl)
     ax.axhline(1/3,color="grey",ls=":",lw=0.8,label="a = 1/3  (Betz)")
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$a$ [-]")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("8c_axial_induction_design_comparison.png")
+    fig.tight_layout(); save_fig("8c_axial_induction_design_comparison")
 
     # 8d — normal loading
     fig, ax = plt.subplots(figsize=(9,5))
     for lbl,_,_,res,*_ in designs:
-        ax.plot(res[:,2],res[:,3]/norm_val,color=_design_color(lbl,n_d),lw=2,label=lbl)
+        ax.plot(res[:,2],res[:,3]/norm_val,color=_design_color(lbl),lw=2,label=lbl)
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("8d_normal_loading_design_comparison.png")
+    fig.tight_layout(); save_fig("8d_normal_loading_design_comparison")
 
     # 8e — angle of attack
     fig, ax = plt.subplots(figsize=(9,5))
     for lbl,_,_,res,*_ in designs:
-        ax.plot(res[:,2],res[:,6],color=_design_color(lbl,n_d),lw=2,label=lbl)
+        ax.plot(res[:,2],res[:,6],color=_design_color(lbl),lw=2,label=lbl)
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$\alpha$ [deg]")
     ax.legend(); ax.grid(True)
-    fig.tight_layout(); save_fig("8e_angle_of_attack_design_comparison.png")
+    fig.tight_layout(); save_fig("8e_angle_of_attack_design_comparison")
 
     # 8f — performance bar chart
     a_ad_=0.5*(1.0-np.sqrt(1.0-CT_TARGET))
@@ -920,7 +884,7 @@ if PLOT_8 and res_base is not None:
     cp_b=[d[5] for d in designs]+[cp_ad_]
     ct_b=[d[4] for d in designs]+[CT_TARGET]
     eff_b=[v/cp_ad_ for v in cp_b]
-    bar_cols=[_design_color(d[0],n_d) for d in designs]+["#aaaaaa"]
+    bar_cols=[_design_color(d[0]) for d in designs]+[_CB_HEX[7]]
     x=np.arange(len(labels_b)); w=0.25
     fig, ax = plt.subplots(figsize=(10,5))
     b1=ax.bar(x-w,cp_b,w,label=r"$C_P$",color=[c+"cc" for c in bar_cols])
@@ -934,14 +898,12 @@ if PLOT_8 and res_base is not None:
     ax.bar_label(b2,fmt="%.4f",padding=3,fontsize=7.5)
     ax.bar_label(b3,fmt="%.3f",padding=3,fontsize=7.5)
     ax.grid(True,axis="y"); fig.tight_layout()
-    save_fig("8f_performance_comparison_all_designs.png")
+    save_fig("8f_performance_comparison_all_designs")
 
 elif PLOT_8:
     print("  [SKIP] PLOT_8 — requires at least baseline to be run")
 
 # ── 9  Cl and chord — optimised designs ──────────────────────────────────────
-import matplotlib.cm as cm
-import matplotlib.colors as mcolors
 
 def _lighten(hex_color, amount=0.45):
     r=int(hex_color[1:3],16)/255; g=int(hex_color[3:5],16)/255; b=int(hex_color[5:7],16)/255
@@ -971,11 +933,11 @@ if PLOT_9:
             _opt_data.append((lbl,r_mid,cl,chord))
 
     if _opt_data:
-        # 9a combined — all three optimised designs on one figure
+        # 9a combined
         fig, ax = plt.subplots(figsize=(9,5))
         ax2_comb=ax.twinx()
         for lbl,r_mid,cl,chord in _opt_data:
-            col=_design_color(lbl,1); col_chord=_lighten(col,0.45)
+            col=_design_color(lbl); col_chord=_lighten(col,0.45)
             ax.plot(r_mid,cl,    color=col,      lw=2,ls="-", label=rf"{lbl} — $C_l$")
             ax2_comb.plot(r_mid,chord,color=col_chord,lw=2,ls="--",label=f"{lbl} — chord")
         ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_l$ [-]"); ax.grid(True)
@@ -983,26 +945,26 @@ if PLOT_9:
         ax.set_zorder(ax2_comb.get_zorder()+1); ax.patch.set_visible(False)
         h1,l1=ax.get_legend_handles_labels(); h2,l2=ax2_comb.get_legend_handles_labels()
         ax.legend(h1+h2,l1+l2,fontsize=8)
-        fig.tight_layout(); save_fig("9a_combined_Cl_and_chord_optimised_designs.png")
+        fig.tight_layout(); save_fig("9a_combined_Cl_and_chord_optimised_designs")
 
-        # 9a individual — one file per optimised design
+        # 9a individual
         for lbl,r_mid,cl,chord in _opt_data:
             fig, ax = plt.subplots(figsize=(9,5))
-            _make_9a_axes(ax,r_mid,cl,chord,_design_color(lbl,1),lbl)
+            _make_9a_axes(ax,r_mid,cl,chord,_design_color(lbl),lbl)
             fig.tight_layout()
-            save_fig("9a_"+lbl.lower().replace(" ","_")+"_Cl_and_chord.png")
+            save_fig("9a_"+lbl.lower().replace(" ","_")+"_Cl_and_chord")
 
-        # 9b circulation proxy — all optimised designs overlaid
+        # 9b circulation proxy
         fig, ax = plt.subplots(figsize=(9,5))
         for lbl,r_mid,cl,chord in _opt_data:
-            ax.plot(r_mid,cl*chord,color=_design_color(lbl,1),lw=2,label=lbl)
+            ax.plot(r_mid,cl*chord,color=_design_color(lbl),lw=2,label=lbl)
         ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_l \cdot c$  [m]"); ax.grid(True)
         ax.legend(); fig.tight_layout()
-        save_fig("9b_circulation_proxy_Cl_times_chord_optimised_designs.png")
+        save_fig("9b_circulation_proxy_Cl_times_chord_optimised_designs")
     else:
         print("  [SKIP] PLOT_9 — no optimised design results with Cl data available")
 
-# ── 10  Polar with operating points — all designs + individual optimised ───────
+# ── 10  Polar with operating points ───────────────────────────────────────────
 if PLOT_10:
     _pol_all=[]; _pol_opt=[]
     for lbl,res_arr in [("Baseline",  res_base),("Analytical", res_anal),
@@ -1047,20 +1009,20 @@ if PLOT_10:
 
         # 10a combined
         fig,ax=plt.subplots(figsize=(9,5)); _draw_polar(ax,_pol_all)
-        fig.tight_layout(); save_fig("10a_combined_Cl_Cd_polar_all_designs.png")
+        fig.tight_layout(); save_fig("10a_combined_Cl_Cd_polar_all_designs")
         # 10a individual
         for lbl,res_arr in _pol_opt:
             fig,ax=plt.subplots(figsize=(9,5)); _draw_polar(ax,[(lbl,res_arr)])
             fig.tight_layout()
-            save_fig("10a_"+lbl.lower().replace(" ","_")+"_Cl_Cd_polar.png")
+            save_fig("10a_"+lbl.lower().replace(" ","_")+"_Cl_Cd_polar")
         # 10b combined
         fig,ax=plt.subplots(figsize=(9,5)); _draw_glide(ax,_pol_all)
-        fig.tight_layout(); save_fig("10b_combined_glide_ratio_vs_alpha_all_designs.png")
+        fig.tight_layout(); save_fig("10b_combined_glide_ratio_vs_alpha_all_designs")
         # 10b individual
         for lbl,res_arr in _pol_opt:
             fig,ax=plt.subplots(figsize=(9,5)); _draw_glide(ax,[(lbl,res_arr)])
             fig.tight_layout()
-            save_fig("10b_"+lbl.lower().replace(" ","_")+"_glide_ratio_vs_alpha.png")
+            save_fig("10b_"+lbl.lower().replace(" ","_")+"_glide_ratio_vs_alpha")
     else:
         print("  [SKIP] PLOT_10 — no design BEM results with Cd data available")
 
@@ -1079,24 +1041,8 @@ OPT_RESULTS_PATH = os.path.join(_HERE, "opt_results.npz")
 
 
 def save_bem_results(path=BEM_RESULTS_PATH):
-    """
-    Save BEM sweep and tip-correction results.
-
-    Contents
-    --------
-    Polar data, configuration scalars,
-    spanwise TSR sweep (TSR_SWEEP_SPAN),
-    performance TSR sweep (TSR_SWEEP_PERF),
-    TSR=8 specific arrays (results_tsr8, res_nc, ct_hist_tsr8, F_tsr8),
-    section-6 pre-computed annuli/spacing arrays,
-    baseline geometry and BEM result.
-    """
-    # Section-6: annuli sensitivity (N = 4, 8, 16, 32, 64, 160) and
-    #            spacing comparison (N = 20, constant vs cosine)
     _ANNULI_N_SAVE = [4, 8, 16, 32, 64, 160]
-    annuli_res = {}
-    annuli_CT_save = {}
-    annuli_CP_save = {}
+    annuli_res = {}; annuli_CT_save = {}; annuli_CP_save = {}
     for N in _ANNULI_N_SAVE:
         b = np.linspace(RootLocation_R, TipLocation_R, N+1); rows = []
         for i in range(N):
@@ -1104,15 +1050,13 @@ def save_bem_results(path=BEM_RESULTS_PATH):
             row, _ = solve_streamtube(b[i], b[i+1], Omega8,
                                       3.0*(1-rm)+1.0, -(14.0*(1-rm)+Pitch))
             rows.append(row)
-        res_N = np.vstack(rows)
-        annuli_res[N] = res_N
+        res_N = np.vstack(rows); annuli_res[N] = res_N
         dr = np.diff(b)*Radius
         annuli_CT_save[N] = float(np.sum(dr*res_N[:,3]*NBlades/(0.5*U0**2*np.pi*Radius**2)))
         annuli_CP_save[N] = float(np.sum(dr*res_N[:,4]*res_N[:,2]*NBlades*Radius*Omega8
                                          /(0.5*U0**3*np.pi*Radius**2)))
 
-    N_SPACING_SAVE = 20
-    spacing_res = {}
+    N_SPACING_SAVE = 20; spacing_res = {}
     for lbl, b in {"constant": np.linspace(RootLocation_R, TipLocation_R, N_SPACING_SAVE+1),
                    "cosine":   RootLocation_R + (TipLocation_R-RootLocation_R)
                                * 0.5*(1-np.cos(np.linspace(0, np.pi, N_SPACING_SAVE+1)))}.items():
@@ -1125,41 +1069,30 @@ def save_bem_results(path=BEM_RESULTS_PATH):
         spacing_res[lbl] = np.vstack(rows)
 
     kw = dict(
-        # Polar
         polar_alpha=polar_alpha, polar_cl=polar_cl, polar_cd=polar_cd,
-        # Config
         cfg_Radius=Radius, cfg_NBlades=NBlades, cfg_U0=U0, cfg_rho=rho,
         cfg_RootLocation_R=RootLocation_R, cfg_TipLocation_R=TipLocation_R,
         cfg_Pitch=Pitch, cfg_CHORD_ROOT=CHORD_ROOT, cfg_CHORD_MIN=CHORD_MIN,
         cfg_CT_TARGET=CT_TARGET, cfg_TSR_DESIGN=TSR_DESIGN, cfg_DELTA_R_R=DELTA_R_R,
-        # Spanwise sweep
         sweep_tsrs=np.array(TSR_SWEEP_SPAN, dtype=float),
         tsr_CT=np.array([sweep_span[t]["CT"] for t in TSR_SWEEP_SPAN]) if sweep_span else np.array([]),
         tsr_CP=np.array([sweep_span[t]["CP"] for t in TSR_SWEEP_SPAN]) if sweep_span else np.array([]),
-        # Performance sweep
         sweep_tsrs_perf=np.array(sorted(sweep_perf.keys()), dtype=float) if sweep_perf else np.array([]),
         tsr_CT_perf=np.array([sweep_perf[t]["CT"] for t in sorted(sweep_perf)]) if sweep_perf else np.array([]),
         tsr_CP_perf=np.array([sweep_perf[t]["CP"] for t in sorted(sweep_perf)]) if sweep_perf else np.array([]),
-        # TSR=8 specific
         results_tsr8=results_tsr8  if results_tsr8  is not None else np.array([]),
         res_nc       =res_nc       if res_nc        is not None else np.array([]),
         ct_hist_tsr8 =ct_hist_tsr8 if ct_hist_tsr8  is not None else np.array([]),
         F_tsr8       =F_tsr8       if F_tsr8        is not None else np.array([]),
-        # Section-6 annuli sensitivity
         annuli_N_list =np.array(_ANNULI_N_SAVE, dtype=float),
         annuli_CT_list=np.array([annuli_CT_save[n] for n in _ANNULI_N_SAVE]),
         annuli_CP_list=np.array([annuli_CP_save[n] for n in _ANNULI_N_SAVE]),
-        annuli_N4  =annuli_res[4],
-        annuli_N8  =annuli_res[8],
-        annuli_N16 =annuli_res[16],
-        annuli_N32 =annuli_res[32],
-        annuli_N64 =annuli_res[64],
-        annuli_N160=annuli_res[160],
-        # Section-6 spacing comparison (N=20)
+        annuli_N4  =annuli_res[4],   annuli_N8  =annuli_res[8],
+        annuli_N16 =annuli_res[16],  annuli_N32 =annuli_res[32],
+        annuli_N64 =annuli_res[64],  annuli_N160=annuli_res[160],
         spacing_N=np.array([N_SPACING_SAVE], dtype=float),
         spacing_constant=spacing_res["constant"],
         spacing_cosine  =spacing_res["cosine"],
-        # Baseline geometry and BEM result (needed by PLOT_8 comparisons)
         r_base =r_base  if r_base  is not None else np.array([]),
         c_base =c_base  if c_base  is not None else np.array([]),
         tw_base=tw_base if tw_base is not None else np.array([]),
@@ -1167,14 +1100,10 @@ def save_bem_results(path=BEM_RESULTS_PATH):
         CT_base=CT_base if CT_base is not None else np.nan,
         CP_base=CP_base if CP_base is not None else np.nan,
     )
-    # Per-TSR spanwise results
     for TSR in TSR_SWEEP_SPAN:
-        if TSR in sweep_data_span:
-            kw[f"sweep_res_{int(TSR)}"] = sweep_data_span[TSR]
-    # Per-TSR performance results
+        if TSR in sweep_data_span: kw[f"sweep_res_{int(TSR)}"] = sweep_data_span[TSR]
     for TSR in sorted(sweep_perf.keys()):
-        if TSR in sweep_data_perf:
-            kw[f"sweep_res_perf_{float(TSR)}"] = sweep_data_perf[TSR]
+        if TSR in sweep_data_perf: kw[f"sweep_res_perf_{float(TSR)}"] = sweep_data_perf[TSR]
 
     np.savez(path, **kw)
     sz = sum(v.nbytes for v in kw.values() if hasattr(v, "nbytes"))
@@ -1182,40 +1111,24 @@ def save_bem_results(path=BEM_RESULTS_PATH):
 
 
 def save_opt_results(path=OPT_RESULTS_PATH):
-    """
-    Save optimisation results (baseline + all optimised designs).
-
-    Contents
-    --------
-    Polar data, configuration scalars,
-    baseline geometry + BEM result,
-    analytical, cubic, and quartic designs (geometry nodes + BEM results
-    + scalar CT/CP + polynomial parameters),
-    actuator-disk reference CP_ad.
-    """
     kw = dict(
-        # Polar (needed by plot_results.py for PLOT_9/10 without bem_results.npz)
         polar_alpha=polar_alpha, polar_cl=polar_cl, polar_cd=polar_cd,
-        # Config
         cfg_Radius=Radius, cfg_NBlades=NBlades, cfg_U0=U0, cfg_rho=rho,
         cfg_RootLocation_R=RootLocation_R, cfg_TipLocation_R=TipLocation_R,
         cfg_Pitch=Pitch, cfg_CHORD_ROOT=CHORD_ROOT, cfg_CHORD_MIN=CHORD_MIN,
         cfg_CT_TARGET=CT_TARGET, cfg_TSR_DESIGN=TSR_DESIGN, cfg_DELTA_R_R=DELTA_R_R,
-        # Baseline
         r_base =r_base  if r_base  is not None else np.array([]),
         c_base =c_base  if c_base  is not None else np.array([]),
         tw_base=tw_base if tw_base is not None else np.array([]),
         res_base=res_base if res_base is not None else np.array([]),
         CT_base=CT_base if CT_base is not None else np.nan,
         CP_base=CP_base if CP_base is not None else np.nan,
-        # Analytical
         r_anal =r_anal  if r_anal  is not None else np.array([]),
         c_anal =c_anal  if c_anal  is not None else np.array([]),
         tw_anal=tw_anal if tw_anal is not None else np.array([]),
         res_anal=res_anal if res_anal is not None else np.array([]),
         CT_anal=CT_anal if CT_anal is not None else np.nan,
         CP_anal=CP_anal if CP_anal is not None else np.nan,
-        # Cubic polynomial
         r_cubic =r_cubic  if r_cubic  is not None else np.array([]),
         c_cubic =c_cubic  if c_cubic  is not None else np.array([]),
         tw_cubic=tw_cubic if tw_cubic is not None else np.array([]),
@@ -1223,7 +1136,6 @@ def save_opt_results(path=OPT_RESULTS_PATH):
         CT_cubic=CT_cubic if CT_cubic is not None else np.nan,
         CP_cubic=CP_cubic if CP_cubic is not None else np.nan,
         p_cubic=np.array(p_cubic, dtype=float) if p_cubic is not None else np.array([]),
-        # Quartic polynomial
         r_qrt =r_qrt  if r_qrt  is not None else np.array([]),
         c_qrt =c_qrt  if c_qrt  is not None else np.array([]),
         tw_qrt=tw_qrt if tw_qrt is not None else np.array([]),
@@ -1231,7 +1143,6 @@ def save_opt_results(path=OPT_RESULTS_PATH):
         CT_qrt=CT_qrt if CT_qrt is not None else np.nan,
         CP_qrt=CP_qrt if CP_qrt is not None else np.nan,
         p_qrt=np.array(p_qrt, dtype=float) if p_qrt is not None else np.array([]),
-        # Actuator disk reference
         CP_ad=CP_ad,
     )
     np.savez(path, **kw)
@@ -1250,74 +1161,40 @@ else:
     print("SAVE_OPT_RESULTS=False — opt_results.npz not written.")
 
 
+# =============================================================================
+# BONUS: Plot-9a pitch sweep (added later for chord/Cl analysis)
+# =============================================================================
 
-
-#Added later for chord cl analysis
-def plot_9a_baseline_pitch_sweep(
-    pitch_values,
-    tsr=8.0,
-    figsize=(9, 5)
-):
+def plot_9a_baseline_pitch_sweep(pitch_values, tsr=8.0, figsize=(9, 5)):
     """
-    Create a Plot-9a-style figure for the baseline blade geometry at a fixed TSR,
-    but for multiple pitch values.
-
-    The plot shows:
-      - C_l on the left y-axis
-      - chord on the right y-axis
-
-    Parameters
-    ----------
-    pitch_values : list or array-like
-        Pitch values in degrees, e.g. [-4, -2, 0, 2]
-    tsr : float, optional
-        Tip-speed ratio at which to run the BEM evaluation.
-    figsize : tuple, optional
-        Matplotlib figure size.
+    Plot-9a-style figure for the baseline blade at fixed TSR,
+    sweeping over multiple pitch values.
     """
-
     fig, ax1 = plt.subplots(figsize=figsize)
     ax2 = ax1.twinx()
 
     for i, pitch_val in enumerate(pitch_values):
-        # Baseline geometry with modified pitch
-        bins = make_bins()
+        bins    = make_bins()
         r_nodes = bins * Radius
         c_nodes = 3.0 * (1.0 - bins) + 1.0
-        tw_nodes = -(14.0 * (1.0 - bins) + pitch_val)
+        tw_nodes= -(14.0 * (1.0 - bins) + pitch_val)
 
-        # Evaluate rotor at requested TSR
         CT_tmp, CP_tmp, res_tmp = evaluate_rotor(r_nodes, c_nodes, tw_nodes, tsr=tsr)
 
-        # Mid-span locations and local Cl
-        r_mid = res_tmp[:, 2]
-        cl_local = res_tmp[:, 8]
+        r_mid      = res_tmp[:, 2]
+        cl_local   = res_tmp[:, 8]
+        chord_mid  = np.interp(r_mid, r_nodes / Radius, c_nodes)
 
-        # Interpolate nodal chord onto annulus midpoints
-        chord_mid = np.interp(r_mid, r_nodes / Radius, c_nodes)
-
-        # Colors
-        col = _tsr_color(i, len(pitch_values))
+        col       = _tsr_color(i, len(pitch_values))
         col_chord = _lighten(col, 0.45)
 
-        # Plot Cl and chord
-        ax1.plot(
-            r_mid, cl_local,
-            color=col, lw=2,
-            label=rf"$\beta={pitch_val:.1f}^\circ$ — $C_l$"
-        )
-        ax2.plot(
-            r_mid, chord_mid,
-            color=col_chord, lw=2, ls="--",
-            label=rf"$\beta={pitch_val:.1f}^\circ$ — chord"
-        )
+        ax1.plot(r_mid, cl_local, color=col, lw=2,
+                 label=rf"$\beta={pitch_val:.1f}^\circ$ — $C_l$")
+        ax2.plot(r_mid, chord_mid, color=col_chord, lw=2, ls="--",
+                 label=rf"$\beta={pitch_val:.1f}^\circ$ — chord")
 
-        print(
-            f"Pitch = {pitch_val:+.2f} deg  |  "
-            f"TSR = {tsr:.2f}  |  "
-            f"CT = {CT_tmp:.5f}  |  "
-            f"CP = {CP_tmp:.5f}"
-        )
+        print(f"Pitch = {pitch_val:+.2f} deg  |  TSR = {tsr:.2f}  |  "
+              f"CT = {CT_tmp:.5f}  |  CP = {CP_tmp:.5f}")
 
     ax1.set_xlabel("r/R")
     ax1.set_ylabel(r"$C_l$ [-]")
