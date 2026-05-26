@@ -49,9 +49,9 @@ TSR_SWEEP_PERF = list(np.arange(4.0, 12.5, 0.5))   # [4.0, 4.5, …, 12.0]
 # ── Sensitivity sweep parameters (all run at TSR=8) ──────────────────────────
 SENS_TSR          = 8
 SENS_N_LIST       = [10, 20, 30, 50]          # panel count sensitivity
-SENS_AW_LIST      = [0.0, 0.1, 0.25, 0.4]    # convection speed sensitivity
-SENS_DPSI_LIST    = [5.0, 10.0, 15.0, 20.0]  # azimuthal step sensitivity
-SENS_NWAKE_LIST   = [1, 2, 3, 5, 8]          # wake-length sensitivity (rotations)
+SENS_AW_LIST      = [0.0, 0.1, 0.25, 0.4, 0.5, 0.6, 0.7]    # convection speed sensitivity
+SENS_DPSI_LIST    = [5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]  # azimuthal step sensitivity
+SENS_NWAKE_LIST   = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]          # wake-length sensitivity (rotations)
 
 # ── Display / save ─────────────────────────────────────────────────────────────
 SHOW_PLOTS = False  # False -> save & close immediately; True -> plt.show() after save
