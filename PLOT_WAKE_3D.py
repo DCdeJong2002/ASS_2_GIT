@@ -4,14 +4,22 @@ Interactive 3-D visualisation of the frozen vortex wake geometry.
 
 Run:  python VortexGeometry.py
       → opens vortex_geometry.html in your browser
+      → saves vortex_geometry_report.pdf  (publication-quality static figure)
 
-Requires:  numpy  plotly
-           pip install plotly
+Requires:  numpy  plotly  matplotlib  seaborn
+           pip install plotly matplotlib seaborn
 """
 
 import os
 import numpy as np
 import plotly.graph_objects as go
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
+import seaborn as sns
 
 # =============================================================================
 # CONFIGURATION  —  edit here
@@ -33,7 +41,17 @@ dpsi_deg = 10.0    # azimuthal step [deg]
 a_w      = 0.25    # frozen-wake axial induction (convection factor)
 
 # ── Output ────────────────────────────────────────────────────────────────────
-OUTPUT_HTML = "vortex_geometry.html"   # saved next to this script
+OUTPUT_HTML   = "vortex_geometry.html"
+OUTPUT_REPORT = "vortex_geometry_report.pdf"
+
+# ── Seaborn colorblind palette (first 3 entries for 3 blades) ────────────────
+# Blue, Orange, Green — all clearly distinguishable
+CB_PALETTE = sns.color_palette("colorblind")
+BLADE_COLORS_MPL = [CB_PALETTE[0], CB_PALETTE[1], CB_PALETTE[2]]
+# Convert to 0-255 integers for Plotly rgba strings
+def _to255(c):
+    return tuple(int(round(v * 255)) for v in c)
+BLADE_COLORS_PLY = [_to255(c) for c in BLADE_COLORS_MPL]
 
 # =============================================================================
 # BLADE GEOMETRY
@@ -43,7 +61,6 @@ def blade_chord(r_R):
     return 3.0 * (1.0 - r_R) + 1.0
 
 def blade_twist(r_R):
-    """Local pitch angle [deg] = geometric twist + global pitch."""
     return 14.0 * (1.0 - r_R) + Pitch
 
 def make_panels(N, distribution="cosine"):
@@ -59,7 +76,7 @@ def make_panels(N, distribution="cosine"):
     return r_edges, r_centers, dr
 
 # =============================================================================
-# VORTEX SYSTEM BUILDER  (identical logic to LiftingLine_FINAL.py)
+# VORTEX SYSTEM BUILDER
 # =============================================================================
 
 def build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w):
@@ -79,7 +96,6 @@ def build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w):
             r   = r_centers[i]
             r_R = r / Radius
 
-            # Control point on the lifting line (rotor plane, x = 0)
             controlpoints.append({
                 'r'        : r,
                 'r_R'      : r_R,
@@ -91,7 +107,6 @@ def build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w):
 
             filaments = []
 
-            # Bound vortex (inner edge → outer edge, x = 0 plane)
             y_in  = r_edges[i]   * cosR;  z_in  = r_edges[i]   * sinR
             y_out = r_edges[i+1] * cosR;  z_out = r_edges[i+1] * sinR
             filaments.append({
@@ -99,7 +114,6 @@ def build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w):
                 'x2': 0.0, 'y2': y_out, 'z2': z_out,
             })
 
-            # Inner trailing vortex (REVERSED: far wake → rotor)
             for j in range(len(psi_arr) - 1):
                 t1 = psi_arr[j]   / Omega;  t2 = psi_arr[j+1] / Omega
                 ri = r_edges[i]
@@ -109,7 +123,6 @@ def build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w):
                 y2r = y2*cosR - z2*sinR;  z2r = y2*sinR + z2*cosR
                 filaments.append({'x1':x2,'y1':y2r,'z1':z2r, 'x2':x1,'y2':y1r,'z2':z1r})
 
-            # Outer trailing vortex (FORWARD: rotor → far wake)
             for j in range(len(psi_arr) - 1):
                 t1 = psi_arr[j]   / Omega;  t2 = psi_arr[j+1] / Omega
                 ro = r_edges[i+1]
@@ -124,7 +137,7 @@ def build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w):
     return controlpoints, rings
 
 # =============================================================================
-# PLOT
+# INTERACTIVE PLOTLY FIGURE  (original + colorblind colours)
 # =============================================================================
 
 def plot_vortex_geometry():
@@ -132,10 +145,7 @@ def plot_vortex_geometry():
     Omega       = U0 * TSR / Radius
     cps, rings  = build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w)
     N_per_blade = len(cps) // NBlades
-    n_ws        = (len(rings[0]) - 1) // 2   # wake segments per trailing edge
-
-    # ── color helpers ─────────────────────────────────────────────────────────
-    BLADE_RGB = [(230, 159, 0), (86, 180, 233), (0, 158, 115)]
+    n_ws        = (len(rings[0]) - 1) // 2
 
     def rgba(rgb, a):
         return f'rgba({rgb[0]},{rgb[1]},{rgb[2]},{a})'
@@ -143,7 +153,6 @@ def plot_vortex_geometry():
     def lighten(rgb, f):
         return tuple(int(c + (255 - c) * f) for c in rgb)
 
-    # ── batch helper: None-separated segments → one Scatter3d trace ───────────
     def seg_trace(segs, color, width, name, lg, show_legend, dash=None):
         xs, ys, zs = [], [], []
         for f in segs:
@@ -160,12 +169,11 @@ def plot_vortex_geometry():
     traces = []
 
     for b in range(NBlades):
-        rgb   = BLADE_RGB[b]
+        rgb   = BLADE_COLORS_PLY[b]
         bname = f'Blade {b + 1}'
         angle = 2.0 * np.pi / NBlades * b
         cosR, sinR = np.cos(angle), np.sin(angle)
 
-        # ── collect filaments ─────────────────────────────────────────────────
         bound_s, inner_s, outer_s = [], [], []
         for p in range(N_per_blade):
             ring = rings[b * N_per_blade + p]
@@ -173,7 +181,6 @@ def plot_vortex_geometry():
             inner_s.extend(ring[1        : n_ws + 1])
             outer_s.extend(ring[n_ws + 1 : 2*n_ws + 1])
 
-        # ── blade skeleton ────────────────────────────────────────────────────
         _, r_arr, _ = make_panels(N=40)
         le_x, le_y, le_z = [], [], []
         te_x, te_y, te_z = [], [], []
@@ -202,7 +209,6 @@ def plot_vortex_geometry():
             line=dict(color=rgba(rgb, 0.20), width=1),
             name=f'{bname} chord', legendgroup=f'bl{b}', showlegend=False, hoverinfo='skip'))
 
-        # ── vortex filaments ──────────────────────────────────────────────────
         traces.append(seg_trace(bound_s, rgba(rgb, 1.0), 5,
                                 f'{bname} bound vortex', f'bv{b}', True))
         traces.append(seg_trace(inner_s, rgba(rgb, 0.55), 1.5,
@@ -210,7 +216,6 @@ def plot_vortex_geometry():
         traces.append(seg_trace(outer_s, rgba(lighten(rgb, 0.40), 0.35), 1.0,
                                 f'{bname} outer trailing', f'ot{b}', True, dash='dot'))
 
-        # ── control points with hover ─────────────────────────────────────────
         cpx   = [cps[b*N_per_blade+p]['coords'][0] for p in range(N_per_blade)]
         cpy   = [cps[b*N_per_blade+p]['coords'][1] for p in range(N_per_blade)]
         cpz   = [cps[b*N_per_blade+p]['coords'][2] for p in range(N_per_blade)]
@@ -223,9 +228,7 @@ def plot_vortex_geometry():
             name=f'{bname} control pts', legendgroup=f'cp{b}', showlegend=True,
             text=htxt, hovertemplate='<b>%{text}</b><extra></extra>'))
 
-    # ── rotor disc reference ──────────────────────────────────────────────────
     theta = np.linspace(0.0, 2.0*np.pi, 180)
-
     traces.append(go.Scatter3d(
         x=np.zeros(180), y=Radius*np.cos(theta), z=Radius*np.sin(theta),
         mode='lines', line=dict(color='rgba(200,200,200,0.18)', width=1),
@@ -251,7 +254,6 @@ def plot_vortex_geometry():
         line=dict(color='rgba(200,200,200,0.15)', width=1, dash='dot'),
         name='Rotor axis', legendgroup='axis', showlegend=True, hoverinfo='skip'))
 
-    # ── layout ────────────────────────────────────────────────────────────────
     fig = go.Figure(data=traces)
     fig.update_layout(
         title=dict(
@@ -300,5 +302,161 @@ def plot_vortex_geometry():
 
 
 # =============================================================================
+# STATIC REPORT FIGURE  (matplotlib, white background, colorblind palette)
+# =============================================================================
+
+def plot_report_figure():
+    """
+    Publication-quality 3-D view using matplotlib's Axes3D.
+    White background, seaborn colorblind palette, legend panel beside the plot.
+    Front-of-rotor view: rotor disc visible on the right, wake trailing to the left.
+    Saved as high-res PDF.
+    """
+    mpl.rcParams.update({
+        "text.usetex"       : False,
+        "font.family"       : "serif",
+        "font.serif"        : ["CMU Serif", "Computer Modern Roman",
+                               "Latin Modern Roman", "DejaVu Serif"],
+        "mathtext.fontset"  : "cm",
+        "axes.labelsize"    : 12,
+        "legend.fontsize"   : 10,
+        "xtick.labelsize"   : 10,
+        "ytick.labelsize"   : 10,
+        "axes.titlesize"    : 12,
+        "savefig.bbox"      : "tight",
+        "savefig.pad_inches": 0.02,
+        "legend.frameon"    : True,
+    })
+
+    Omega       = U0 * TSR / Radius
+    cps, rings  = build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w)
+    N_per_blade = len(cps) // NBlades
+    n_ws        = (len(rings[0]) - 1) // 2
+
+    fig = plt.figure(figsize=(12, 7))
+    ax        = fig.add_axes([0.0, 0.0, 0.77, 1.0], projection='3d')
+    ax_legend = fig.add_axes([0.76, 0.12, 0.24, 0.76])
+    ax_legend.axis('off')
+    fig.patch.set_facecolor('white')
+    ax.set_facecolor('white')
+
+    pane_col = (0.93, 0.93, 0.93, 0.50)
+    ax.xaxis.set_pane_color(pane_col)
+    ax.yaxis.set_pane_color(pane_col)
+    ax.zaxis.set_pane_color(pane_col)
+    ax.xaxis._axinfo['grid']['color'] = (0.80, 0.80, 0.80, 0.50)
+    ax.yaxis._axinfo['grid']['color'] = (0.80, 0.80, 0.80, 0.50)
+    ax.zaxis._axinfo['grid']['color'] = (0.80, 0.80, 0.80, 0.50)
+
+    legend_handles = []
+
+    for b in range(NBlades):
+        col   = BLADE_COLORS_MPL[b]
+        angle = 2.0 * np.pi / NBlades * b
+        cosR, sinR = np.cos(angle), np.sin(angle)
+
+        # ── blade outline (LE + TE + caps + chord ticks) ──────────────────
+        _, r_arr, _ = make_panels(N=80)
+        le_pts, te_pts = [], []
+        for r in r_arr:
+            r_R   = r / Radius
+            chord = blade_chord(r_R)
+            twist = np.radians(blade_twist(r_R))
+            ry = r * cosR;  rz = r * sinR
+            le_pts.append([(chord/2)*np.sin(twist), ry, rz-(chord/2)*np.cos(twist)])
+            te_pts.append([-(chord/2)*np.sin(twist), ry, rz+(chord/2)*np.cos(twist)])
+        le_pts = np.array(le_pts);  te_pts = np.array(te_pts)
+
+        ax.plot(le_pts[:,0], le_pts[:,1], le_pts[:,2], color=col, lw=2.2, alpha=1.0,  zorder=8)
+        ax.plot(te_pts[:,0], te_pts[:,1], te_pts[:,2], color=col, lw=1.2, alpha=0.60, zorder=8)
+        ax.plot([le_pts[-1,0],te_pts[-1,0]], [le_pts[-1,1],te_pts[-1,1]],
+                [le_pts[-1,2],te_pts[-1,2]], color=col, lw=1.0, alpha=0.60)
+        ax.plot([le_pts[0,0], te_pts[0,0]], [le_pts[0,1], te_pts[0,1]],
+                [le_pts[0,2], te_pts[0,2]], color=col, lw=1.0, alpha=0.60)
+        step = max(1, len(r_arr) // 8)
+        for idx in range(0, len(r_arr), step):
+            ax.plot([le_pts[idx,0],te_pts[idx,0]],
+                    [le_pts[idx,1],te_pts[idx,1]],
+                    [le_pts[idx,2],te_pts[idx,2]],
+                    color=col, lw=0.5, alpha=0.18)
+
+        # ── bound vortex (thick solid) ────────────────────────────────────
+        bv_xs, bv_ys, bv_zs = [], [], []
+        for p in range(N_per_blade):
+            f = rings[b*N_per_blade+p][0]
+            bv_xs += [f['x1'],f['x2']];  bv_ys += [f['y1'],f['y2']];  bv_zs += [f['z1'],f['z2']]
+        ax.plot(bv_xs, bv_ys, bv_zs, color=col, lw=4.0, solid_capstyle='round', zorder=10)
+
+        # ── inner trailing vortex (medium solid) ──────────────────────────
+        for p in range(N_per_blade):
+            for f in rings[b*N_per_blade+p][1 : n_ws+1]:
+                ax.plot([f['x1'],f['x2']], [f['y1'],f['y2']], [f['z1'],f['z2']],
+                        color=col, lw=0.9, alpha=0.65, zorder=4)
+
+        # ── outer trailing vortex (light dashed) ──────────────────────────
+        light_col = tuple(min(1.0, c*0.60+0.40) for c in col[:3])
+        for p in range(N_per_blade):
+            for f in rings[b*N_per_blade+p][n_ws+1 : 2*n_ws+1]:
+                ax.plot([f['x1'],f['x2']], [f['y1'],f['y2']], [f['z1'],f['z2']],
+                        color=light_col, lw=0.65, alpha=0.50,
+                        linestyle='--', dashes=(5, 4), zorder=3)
+
+        legend_handles.append(Line2D([0],[0], color=col, lw=2.5, label=f'Blade {b+1}'))
+
+    # ── rotor disc reference ───────────────────────────────────────────────
+    theta    = np.linspace(0, 2*np.pi, 360)
+    r_root_m = RootLocation_R * Radius
+    ax.plot(np.zeros(360), Radius*np.cos(theta), Radius*np.sin(theta),
+            color='#999999', lw=1.2, alpha=0.55)
+    ax.plot(np.zeros(360), r_root_m*np.cos(theta), r_root_m*np.sin(theta),
+            color='#999999', lw=0.7, alpha=0.40)
+    for ang in np.linspace(0, 2*np.pi, 7)[:-1]:
+        ax.plot([0, 0],
+                [r_root_m*np.cos(ang), Radius*np.cos(ang)],
+                [r_root_m*np.sin(ang), Radius*np.sin(ang)],
+                color='#cccccc', lw=0.4, alpha=0.35)
+
+    # ── rotor axis ────────────────────────────────────────────────────────
+    x_max = max(f['x2'] for ring in rings for f in ring)
+    ax.plot([-8, x_max*1.02], [0, 0], [0, 0],
+            color='#888888', lw=0.9, linestyle=':', alpha=0.65)
+
+    # ── view: front of rotor facing viewer, wake trailing to the left ─────
+    ax.view_init(elev=22, azim=118)
+
+    # ── axis labels (fontsize from rcParams) ──────────────────────────────
+    ax.set_xlabel('x \u2014 axial [m]', labelpad=10)
+    ax.set_ylabel('y [m]',              labelpad=10)
+    ax.set_zlabel('z [m]',              labelpad=8)
+
+    # ── legend panel ──────────────────────────────────────────────────────
+    legend_handles += [
+        Line2D([0],[0], color='white',   lw=0,   label=' '),
+        Line2D([0],[0], color='#333333', lw=0,   label='Line types:'),
+        Line2D([0],[0], color='#444444', lw=3.8, label='Bound vortex'),
+        Line2D([0],[0], color='#666666', lw=1.0, alpha=0.8,
+               label='Inner trailing vortex'),
+        Line2D([0],[0], color='#aaaaaa', lw=0.9, linestyle='--',
+               dashes=(5, 4), label='Outer trailing vortex'),
+        Line2D([0],[0], color='#999999', lw=1.0, label='Rotor disc / axis'),
+    ]
+    leg = ax_legend.legend(handles=legend_handles, loc='center',
+                           framealpha=0.97, edgecolor='#cccccc',
+                           handlelength=2.6, labelspacing=0.55,
+                           title='Vortex wake geometry', title_fontsize=11)
+    leg.get_frame().set_linewidth(0.7)
+    leg.get_title().set_fontweight('semibold')
+
+    out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), OUTPUT_REPORT)
+    fig.savefig(out_path, dpi=300, facecolor='white', edgecolor='none')
+    print(f"Saved  \u2192  {out_path}")
+    plt.close(fig)
+    return out_path
+
+
+# =============================================================================
 if __name__ == "__main__":
+    # 1) static report figure (always runs, no display needed)
+    plot_report_figure()
+    # 2) interactive Plotly figure
     plot_vortex_geometry()
