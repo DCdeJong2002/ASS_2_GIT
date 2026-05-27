@@ -43,7 +43,7 @@ R_CORE       = 1e-3           # vortex core radius (Rankine) [m]
 # ── Wake convection speed mode ────────────────────────────────────────────────
 # False -> use A_WAKE directly (fixed frozen wake)
 # True  -> iterate outer loop until a_w converges to mean axial induction
-USE_ITERATED_AW = False
+USE_ITERATED_AW = True
 AW_ITER_TOL     = 1e-3        # outer loop convergence tolerance on a_w
 AW_ITER_MAX     = 20          # maximum outer iterations
 AW_ITER_INIT    = 0.25        # initial guess for a_w when iterating
@@ -57,7 +57,7 @@ TSR_SWEEP_PERF = list(np.arange(4.0, 12.5, 0.5))   # [4.0, 4.5, …, 12.0]
 # ── Sensitivity sweep parameters (all run at TSR=8) ──────────────────────────
 SENS_TSR          = 8
 SENS_N_LIST       = [5, 8, 10, 13, 15, 18, 20, 25, 30, 50]
-SENS_AW_LIST      = [0.05, 0.1, 0.15, 0.2, 0.25, 0.35, 0.4, 0.45, 0.5]
+SENS_AW_LIST      = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
 SENS_DPSI_LIST    = [1.0, 2.5, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0,
                      60.0, 70.0, 80.0, 90.0]
 SENS_NWAKE_LIST   = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
@@ -893,8 +893,8 @@ elif PLOT_LL_2:
 
 if PLOT_LL_3 and sweep_data_span:
     for qty_col, ylabel, fname in [
-            (3, r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$", "LL_3a_normal_loading_Cn_vs_rR"),
-            (4, r"$C_t = F_t\,/\,(½\rho U_\infty^2 R)$", "LL_3b_azimuthal_loading_Ct_vs_rR")]:
+            (3, r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$", "LL_3a_normal_loading_Cn_vs_rR"),
+            (4, r"$C_t = F_t\,/\,(\frac{1}{2}\rho U_\infty^2 R)$", "LL_3b_azimuthal_loading_Ct_vs_rR")]:
         fig, ax = plt.subplots(figsize=(8, 5))
         for k, TSR in enumerate(TSR_SWEEP_SPAN):
             res = sweep_data_span[TSR]
@@ -950,31 +950,113 @@ elif PLOT_LL_5_PERF:
 # =============================================================================
 
 if PLOT_SENS_AW and sens_aw_data:
-    n_aw = len(SENS_AW_LIST)
-    for qty_col, ylabel, fname in [
-            (0, r"$a$ [-]",                               "Sens_AW_a_axial_induction"),
-            (3, r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$", "Sens_AW_b_normal_loading"),
-            (5, r"$\Gamma$ [m²/s]",                       "Sens_AW_c_circulation")]:
-        fig, ax = plt.subplots(figsize=(8, 5))
-        for idx, a_w in enumerate(SENS_AW_LIST):
-            res, CT, CP = sens_aw_data[a_w]
-            y = res[:, qty_col] / norm_val if qty_col == 3 else res[:, qty_col]
-            ax.plot(res[:, 2], y, color=_sens_color(idx, n_aw), lw=2,
-                    label=rf"$a_w={a_w}$  $C_T={CT:.3f}$")
-        ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
-        ax.legend(fontsize=8); ax.grid(True)
-        fig.tight_layout(); save_fig(fname)
-
+    n_aw    = len(SENS_AW_LIST)
     aw_vals = SENS_AW_LIST
     ct_vals = [sens_aw_data[aw][1] for aw in aw_vals]
     cp_vals = [sens_aw_data[aw][2] for aw in aw_vals]
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].plot(aw_vals, ct_vals, "o-", color="#0000FF", lw=2)
-    axes[1].plot(aw_vals, cp_vals, "o-", color="#2ca02c", lw=2)
-    axes[0].set_xlabel(r"Wake induction $a_w$ [-]"); axes[0].set_ylabel(r"$C_T$ [-]")
-    axes[1].set_xlabel(r"Wake induction $a_w$ [-]"); axes[1].set_ylabel(r"$C_P$ [-]")
-    axes[0].grid(True); axes[1].grid(True)
-    fig.tight_layout(); save_fig("Sens_AW_d_CT_CP_vs_aw")
+    aw_arr  = np.array(aw_vals)
+
+    # Recover mean_a from stored meta if available, else fall back to mean of column 0
+    meana_vals = []
+    for aw in aw_vals:
+        entry = _solver_meta.get(f"aw_{aw}")
+        if entry is not None:
+            meana_vals.append(entry[2])
+        else:
+            res, _, _ = sens_aw_data[aw]
+            meana_vals.append(float(np.mean(res[:, 0])))
+    meana_arr = np.array(meana_vals)
+    resid_arr = meana_arr - aw_arr
+
+    # Self-consistent a_w: zero crossing of residual
+    try:
+        sc_aw = float(np.interp(0.0, resid_arr[::-1], aw_arr[::-1]))
+        sc_CT = float(np.interp(sc_aw, aw_arr, np.array(ct_vals)))
+        sc_CP = float(np.interp(sc_aw, aw_arr, np.array(cp_vals)))
+        has_sc = True
+        print(f"  Self-consistent a_w = {sc_aw:.4f}  CT={sc_CT:.4f}  CP={sc_CP:.4f}")
+    except Exception:
+        has_sc = False
+        sc_aw  = A_WAKE
+
+    # ── CT vs a_w ─────────────────────────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(aw_arr, ct_vals, "o-", color="#0173b2", lw=2, ms=5, zorder=3)
+    ax.axvline(A_WAKE, color="#d55e00", ls="--", lw=1.5,
+               label=rf"Fixed $a_w = {A_WAKE}$")
+    if has_sc:
+        ax.axvline(sc_aw, color="#029e73", ls=":", lw=2,
+                   label=rf"Self-consistent $a_w = {sc_aw:.3f}$")
+    ax.set_xlabel(r"Wake convection induction $a_w$ [-]")
+    ax.set_ylabel(r"$C_T$ [-]")
+    ax.legend(fontsize=9); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_AW_1_CT_vs_aw")
+
+    # ── CP vs a_w ─────────────────────────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(aw_arr, cp_vals, "o-", color="#029e73", lw=2, ms=5, zorder=3)
+    ax.axvline(A_WAKE, color="#d55e00", ls="--", lw=1.5,
+               label=rf"Fixed $a_w = {A_WAKE}$")
+    if has_sc:
+        ax.axvline(sc_aw, color="#0173b2", ls=":", lw=2,
+                   label=rf"Self-consistent $a_w = {sc_aw:.3f}$")
+    ax.set_xlabel(r"Wake convection induction $a_w$ [-]")
+    ax.set_ylabel(r"$C_P$ [-]")
+    ax.legend(fontsize=9); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_AW_2_CP_vs_aw")
+
+    # ── mean_a vs a_w ─────────────────────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(aw_arr, meana_arr, "o-", color="#0173b2", lw=2, ms=5,
+            label=r"$\bar{a}$ from LL")
+    ax.plot(aw_arr, aw_arr, "--", color="#949494", lw=1.5,
+            label=r"$\bar{a} = a_w$  (self-consistent line)")
+    if has_sc:
+        ax.axvline(sc_aw, color="#029e73", ls=":", lw=2,
+                   label=rf"Self-consistent $a_w = {sc_aw:.3f}$")
+        ax.scatter([sc_aw], [sc_aw], color="#029e73", s=70, zorder=5)
+    ax.set_xlabel(r"Input $a_w$ [-]"); ax.set_ylabel(r"$\bar{a}$ [-]")
+    ax.legend(fontsize=9); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_AW_3_mean_a_vs_aw")
+
+    # ── Residual vs a_w ───────────────────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(aw_arr, resid_arr, "o-", color="#d55e00", lw=2, ms=5)
+    ax.axhline(0, color="#949494", ls="--", lw=1.5)
+    if has_sc:
+        ax.axvline(sc_aw, color="#029e73", ls=":", lw=2,
+                   label=rf"Zero crossing $a_w = {sc_aw:.3f}$")
+        ax.scatter([sc_aw], [0.0], color="#029e73", s=70, zorder=5)
+        ax.legend(fontsize=9)
+    ax.set_xlabel(r"Input $a_w$ [-]")
+    ax.set_ylabel(r"Residual $\bar{a} - a_w$ [-]")
+    ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_AW_4_residual_vs_aw")
+
+    # ── Spanwise distributions — one file each ────────────────────────────
+    for qty_col, ylabel, fname, use_meana_label in [
+            (0, r"$a$ [-]",
+             "Sens_AW_5_axial_induction_vs_rR",   True),
+            (5, r"$\Gamma$ [m$^2$/s]",
+             "Sens_AW_6_circulation_vs_rR",        False),
+            (3, r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$ [-]",
+             "Sens_AW_7_normal_loading_vs_rR",     False),
+            (7, r"$\phi$ [deg]",
+             "Sens_AW_8_inflow_angle_vs_rR",       False)]:
+        fig, ax = plt.subplots(figsize=(9, 5))
+        for idx, a_w in enumerate(SENS_AW_LIST):
+            res, CT, CP = sens_aw_data[a_w]
+            y = res[:, qty_col] / norm_val if qty_col == 3 else res[:, qty_col]
+            if use_meana_label:
+                lbl = rf"$a_w={a_w:.2f}$  $\bar{{a}}={meana_vals[idx]:.3f}$"
+            else:
+                lbl = rf"$a_w={a_w:.2f}$  $C_T={CT:.3f}$"
+            ax.plot(res[:, 2], y, color=_sens_color(idx, n_aw), lw=1.8, label=lbl)
+        ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
+        ax.legend(fontsize=8, bbox_to_anchor=(1.01, 1), loc="upper left")
+        ax.grid(True)
+        fig.tight_layout(); save_fig(fname)
+
 elif PLOT_SENS_AW:
     _skip("PLOT_SENS_AW", "convection speed sensitivity data missing")
 
@@ -985,49 +1067,66 @@ elif PLOT_SENS_AW:
 if PLOT_SENS_DISC and sens_disc_data:
     n_N = len(SENS_N_LIST)
 
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    # ── Panel count: Cn spanwise ──────────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(8, 5))
     for idx, N in enumerate(SENS_N_LIST):
         if (N, "cosine") not in sens_disc_data: continue
         res, CT, CP = sens_disc_data[(N, "cosine")]
-        col = _sens_color(idx, n_N)
-        axes[0].plot(res[:, 2], res[:, 3] / norm_val, color=col, lw=2,
-                     label=rf"N={N}  $C_T={CT:.3f}$")
-        axes[1].plot(res[:, 2], res[:, 0], color=col, lw=2,
-                     label=rf"N={N}  $C_P={CP:.3f}$")
-    axes[0].set_xlabel("r/R"); axes[0].set_ylabel(r"$C_n$ [-]")
-    axes[1].set_xlabel("r/R"); axes[1].set_ylabel(r"$a$ [-]")
-    axes[0].set_title("Panel count sensitivity (cosine)")
-    axes[1].set_title("Axial induction (cosine)")
-    axes[0].legend(fontsize=8); axes[1].legend(fontsize=8)
-    axes[0].grid(True); axes[1].grid(True)
-    fig.tight_layout(); save_fig("Sens_Disc_a_panel_count_cosine")
+        ax.plot(res[:, 2], res[:, 3] / norm_val, color=_sens_color(idx, n_N), lw=2,
+                label=rf"N={N}  $C_T={CT:.3f}$")
+    ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_n$ [-]")
+    ax.legend(fontsize=8); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_Disc_a1_Cn_panel_count_cosine")
 
+    # ── Panel count: a spanwise ───────────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for idx, N in enumerate(SENS_N_LIST):
+        if (N, "cosine") not in sens_disc_data: continue
+        res, CT, CP = sens_disc_data[(N, "cosine")]
+        ax.plot(res[:, 2], res[:, 0], color=_sens_color(idx, n_N), lw=2,
+                label=rf"N={N}  $C_P={CP:.3f}$")
+    ax.set_xlabel("r/R"); ax.set_ylabel(r"$a$ [-]")
+    ax.legend(fontsize=8); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_Disc_a2_a_panel_count_cosine")
+
+    # ── Cosine vs constant: Cn spanwise ───────────────────────────────────
     N_ref = N_PANELS
-    fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+    fig, ax = plt.subplots(figsize=(8, 5))
     for dist, col, ls in [("cosine", "#0000FF", "-"), ("constant", "#d62728", "--")]:
         if (N_ref, dist) not in sens_disc_data: continue
         res, CT, CP = sens_disc_data[(N_ref, dist)]
-        axes[0].plot(res[:, 2], res[:, 3] / norm_val, color=col, lw=2, ls=ls,
-                     label=rf"{dist.capitalize()}  $C_T={CT:.3f}$")
-        axes[1].plot(res[:, 2], res[:, 0], color=col, lw=2, ls=ls,
-                     label=rf"{dist.capitalize()}  $C_P={CP:.3f}$")
-    axes[0].set_xlabel("r/R"); axes[0].set_ylabel(r"$C_n$ [-]")
-    axes[1].set_xlabel("r/R"); axes[1].set_ylabel(r"$a$ [-]")
-    axes[0].set_title(f"Cosine vs constant spacing (N={N_ref})")
-    axes[1].set_title(f"Axial induction (N={N_ref})")
-    axes[0].legend(fontsize=8); axes[1].legend(fontsize=8)
-    axes[0].grid(True); axes[1].grid(True)
-    fig.tight_layout(); save_fig("Sens_Disc_b_cosine_vs_constant")
+        ax.plot(res[:, 2], res[:, 3] / norm_val, color=col, lw=2, ls=ls,
+                label=rf"{dist.capitalize()}  $C_T={CT:.3f}$")
+    ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_n$ [-]")
+    ax.legend(fontsize=8); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_Disc_b1_Cn_cosine_vs_constant")
 
+    # ── Cosine vs constant: a spanwise ────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(8, 5))
+    for dist, col, ls in [("cosine", "#0000FF", "-"), ("constant", "#d62728", "--")]:
+        if (N_ref, dist) not in sens_disc_data: continue
+        res, CT, CP = sens_disc_data[(N_ref, dist)]
+        ax.plot(res[:, 2], res[:, 0], color=col, lw=2, ls=ls,
+                label=rf"{dist.capitalize()}  $C_P={CP:.3f}$")
+    ax.set_xlabel("r/R"); ax.set_ylabel(r"$a$ [-]")
+    ax.legend(fontsize=8); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_Disc_b2_a_cosine_vs_constant")
+
+    # ── CT convergence vs N ───────────────────────────────────────────────
     N_vals = [N for N in SENS_N_LIST if (N, "cosine") in sens_disc_data]
     ct_N   = [sens_disc_data[(N, "cosine")][1] for N in N_vals]
     cp_N   = [sens_disc_data[(N, "cosine")][2] for N in N_vals]
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].plot(N_vals, ct_N, "o-", color="#0000FF", lw=2)
-    axes[1].plot(N_vals, cp_N, "o-", color="#2ca02c", lw=2)
-    axes[0].set_xlabel("N panels"); axes[0].set_ylabel(r"$C_T$ [-]"); axes[0].grid(True)
-    axes[1].set_xlabel("N panels"); axes[1].set_ylabel(r"$C_P$ [-]"); axes[1].grid(True)
-    fig.tight_layout(); save_fig("Sens_Disc_c_CT_CP_convergence_vs_N")
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(N_vals, ct_N, "o-", color="#0000FF", lw=2)
+    ax.set_xlabel("N panels"); ax.set_ylabel(r"$C_T$ [-]"); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_Disc_c1_CT_convergence_vs_N")
+
+    # ── CP convergence vs N ───────────────────────────────────────────────
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(N_vals, cp_N, "o-", color="#2ca02c", lw=2)
+    ax.set_xlabel("N panels"); ax.set_ylabel(r"$C_P$ [-]"); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_Disc_c2_CP_convergence_vs_N")
+
 elif PLOT_SENS_DISC:
     _skip("PLOT_SENS_DISC", "discretisation sensitivity data missing")
 
@@ -1038,8 +1137,10 @@ elif PLOT_SENS_DISC:
 if PLOT_SENS_DPSI and sens_dpsi_data:
     n_dpsi = len(SENS_DPSI_LIST)
     for qty_col, ylabel, fname in [
-            (0, r"$a$ [-]",                               "Sens_DPSI_a_axial_induction"),
-            (3, r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$", "Sens_DPSI_b_normal_loading")]:
+            (0, r"$a$ [-]",
+             "Sens_DPSI_a_axial_induction"),
+            (3, r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$ [-]",
+             "Sens_DPSI_b_normal_loading")]:
         fig, ax = plt.subplots(figsize=(8, 5))
         for idx, dpsi in enumerate(SENS_DPSI_LIST):
             res, CT, CP = sens_dpsi_data[dpsi]
@@ -1053,13 +1154,17 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
     dpsi_vals = SENS_DPSI_LIST
     ct_vals   = [sens_dpsi_data[d][1] for d in dpsi_vals]
     cp_vals   = [sens_dpsi_data[d][2] for d in dpsi_vals]
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].plot(dpsi_vals, ct_vals, "o-", color="#0000FF", lw=2)
-    axes[1].plot(dpsi_vals, cp_vals, "o-", color="#2ca02c", lw=2)
-    axes[0].set_xlabel(r"$\Delta\psi$ [deg]"); axes[0].set_ylabel(r"$C_T$ [-]")
-    axes[1].set_xlabel(r"$\Delta\psi$ [deg]"); axes[1].set_ylabel(r"$C_P$ [-]")
-    axes[0].grid(True); axes[1].grid(True)
-    fig.tight_layout(); save_fig("Sens_DPSI_c_CT_CP_vs_dpsi")
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(dpsi_vals, ct_vals, "o-", color="#0000FF", lw=2)
+    ax.set_xlabel(r"$\Delta\psi$ [deg]"); ax.set_ylabel(r"$C_T$ [-]"); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_DPSI_c1_CT_vs_dpsi")
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(dpsi_vals, cp_vals, "o-", color="#2ca02c", lw=2)
+    ax.set_xlabel(r"$\Delta\psi$ [deg]"); ax.set_ylabel(r"$C_P$ [-]"); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_DPSI_c2_CP_vs_dpsi")
+
 elif PLOT_SENS_DPSI:
     _skip("PLOT_SENS_DPSI", "azimuthal step sensitivity data missing")
 
@@ -1070,8 +1175,10 @@ elif PLOT_SENS_DPSI:
 if PLOT_SENS_WAKE and sens_wake_data:
     n_nw = len(SENS_NWAKE_LIST)
     for qty_col, ylabel, fname in [
-            (0, r"$a$ [-]",                               "Sens_Wake_a_axial_induction"),
-            (3, r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$", "Sens_Wake_b_normal_loading")]:
+            (0, r"$a$ [-]",
+             "Sens_Wake_a_axial_induction"),
+            (3, r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$ [-]",
+             "Sens_Wake_b_normal_loading")]:
         fig, ax = plt.subplots(figsize=(8, 5))
         for idx, nw in enumerate(SENS_NWAKE_LIST):
             res, CT, CP = sens_wake_data[nw]
@@ -1085,13 +1192,19 @@ if PLOT_SENS_WAKE and sens_wake_data:
     nw_vals = SENS_NWAKE_LIST
     ct_vals = [sens_wake_data[nw][1] for nw in nw_vals]
     cp_vals = [sens_wake_data[nw][2] for nw in nw_vals]
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].plot(nw_vals, ct_vals, "o-", color="#0000FF", lw=2)
-    axes[1].plot(nw_vals, cp_vals, "o-", color="#2ca02c", lw=2)
-    axes[0].set_xlabel(r"Wake length $N_{wake}$ [rotations]"); axes[0].set_ylabel(r"$C_T$ [-]")
-    axes[1].set_xlabel(r"Wake length $N_{wake}$ [rotations]"); axes[1].set_ylabel(r"$C_P$ [-]")
-    axes[0].grid(True); axes[1].grid(True)
-    fig.tight_layout(); save_fig("Sens_Wake_c_CT_CP_convergence_vs_Nwake")
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(nw_vals, ct_vals, "o-", color="#0000FF", lw=2)
+    ax.set_xlabel(r"Wake length $N_{wake}$ [rotations]")
+    ax.set_ylabel(r"$C_T$ [-]"); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_Wake_c1_CT_convergence_vs_Nwake")
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(nw_vals, cp_vals, "o-", color="#2ca02c", lw=2)
+    ax.set_xlabel(r"Wake length $N_{wake}$ [rotations]")
+    ax.set_ylabel(r"$C_P$ [-]"); ax.grid(True)
+    fig.tight_layout(); save_fig("Sens_Wake_c2_CP_convergence_vs_Nwake")
+
 elif PLOT_SENS_WAKE:
     _skip("PLOT_SENS_WAKE", "wake length sensitivity data missing")
 
