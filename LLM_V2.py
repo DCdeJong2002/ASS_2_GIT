@@ -40,6 +40,14 @@ A_WAKE       = 0.25           # frozen-wake axial induction (convection speed fa
 DISTRIBUTION = "cosine"       # spanwise panel distribution: "cosine" or "constant"
 R_CORE       = 1e-3           # vortex core radius (Rankine) [m]
 
+# ── Wake convection speed mode ────────────────────────────────────────────────
+# False -> use A_WAKE directly (fixed frozen wake)
+# True  -> iterate outer loop until a_w converges to mean axial induction
+USE_ITERATED_AW = False
+AW_ITER_TOL     = 1e-3        # outer loop convergence tolerance on a_w
+AW_ITER_MAX     = 20          # maximum outer iterations
+AW_ITER_INIT    = 0.25        # initial guess for a_w when iterating
+
 # ── TSR sweeps ────────────────────────────────────────────────────────────────
 TSR_SWEEP_SPAN = [6, 8, 10]   # used for all spanwise plots
 
@@ -48,37 +56,38 @@ TSR_SWEEP_PERF = list(np.arange(4.0, 12.5, 0.5))   # [4.0, 4.5, …, 12.0]
 
 # ── Sensitivity sweep parameters (all run at TSR=8) ──────────────────────────
 SENS_TSR          = 8
-SENS_N_LIST       = [5, 10, 15, 20, 25, 30, 50]          # panel count sensitivity
-SENS_AW_LIST      = [0.0, 0.1, 0.25, 0.33, 0.4, 0.5, 0.6, 0.7]    # convection speed sensitivity
-SENS_DPSI_LIST    = [5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]  # azimuthal step sensitivity
-SENS_NWAKE_LIST   = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]          # wake-length sensitivity (rotations)
+SENS_N_LIST       = [5, 8, 10, 13, 15, 18, 20, 25, 30, 50]
+SENS_AW_LIST      = [0.05, 0.1, 0.2, 0.25, 0.33, 0.4, 0.45, 0.5]
+SENS_DPSI_LIST    = [1.0, 2.5, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0,
+                     60.0, 70.0, 80.0, 90.0]
+SENS_NWAKE_LIST   = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
 # ── Display / save ─────────────────────────────────────────────────────────────
-SHOW_PLOTS = False  # False -> save & close immediately; True -> plt.show() after save
+SHOW_PLOTS = False
 
 # ── Computations (toggle off to skip expensive runs) ─────────────────────────
 RUN_TSR_SWEEP_SPAN   = True
-RUN_TSR_SWEEP_PERF   = True   # λ=4..12 step 0.5, only used for the CT/CP-λ performance plots
-RUN_SENS_CONV_SPEED  = True   # sensitivity: convection speed (a_w)
-RUN_SENS_DISC        = True   # sensitivity: blade discretization (N, cosine vs constant)
-RUN_SENS_AZIMUTHAL   = True   # sensitivity: azimuthal step (dpsi)
-RUN_SENS_WAKE_LENGTH = True   # sensitivity: wake length (N_wake)
+RUN_TSR_SWEEP_PERF   = True
+RUN_SENS_CONV_SPEED  = True
+RUN_SENS_DISC        = True
+RUN_SENS_AZIMUTHAL   = True
+RUN_SENS_WAKE_LENGTH = True
 
 # ── Plots ──────────────────────────────────────────────────────────────────────
-PLOT_LL_1  = True   # inflow angle and AoA vs r/R           (requires RUN_TSR_SWEEP_SPAN)
-PLOT_LL_2  = True   # axial and tangential induction vs r/R (requires RUN_TSR_SWEEP_SPAN)
-PLOT_LL_3  = True   # axial and azimuthal loading vs r/R    (requires RUN_TSR_SWEEP_SPAN)
-PLOT_LL_4  = True   # circulation vs r/R                    (requires RUN_TSR_SWEEP_SPAN)
-PLOT_LL_5  = True   # CT and CP at the 3 spanwise TSRs      (requires RUN_TSR_SWEEP_SPAN)
-PLOT_LL_5_PERF = True  # CT and CP vs λ=4..12 (step 0.5)   (requires RUN_TSR_SWEEP_PERF)
-PLOT_SENS_AW   = True   # sensitivity: convection speed     (requires RUN_SENS_CONV_SPEED)
-PLOT_SENS_DISC = True   # sensitivity: discretization       (requires RUN_SENS_DISC)
-PLOT_SENS_DPSI = True   # sensitivity: azimuthal step       (requires RUN_SENS_AZIMUTHAL)
-PLOT_SENS_WAKE = True   # sensitivity: wake length          (requires RUN_SENS_WAKE_LENGTH)
+PLOT_LL_1      = True
+PLOT_LL_2      = True
+PLOT_LL_3      = True
+PLOT_LL_4      = True
+PLOT_LL_5      = True
+PLOT_LL_5_PERF = True
+PLOT_SENS_AW   = True
+PLOT_SENS_DISC = True
+PLOT_SENS_DPSI = True
+PLOT_SENS_WAKE = True
 
 # ── Save ──────────────────────────────────────────────────────────────────────
-SAVE_LL_RESULTS = True  # write ll_results.npz
-SAVE_TABLES_PDF = True  # write summary tables to LLM_tables/
+SAVE_LL_RESULTS = True
+SAVE_TABLES_PDF = True
 
 # =============================================================================
 # 1.  POLAR DATA
@@ -109,12 +118,29 @@ mpl.rcParams.update({
     "legend.frameon"    : True,
 })
 
-_CB_PALETTE = sns.color_palette("colorblind").as_hex()
+# Extended palette: 10 colorblind-safe base colors + 10 perceptually distinct
+# extras, giving 20 unique colors for sensitivity sweeps with many lines.
+# The first 10 are the seaborn colorblind palette; extras are chosen to be
+# maximally distinct from both the base colors and from each other.
+_CB_PALETTE = sns.color_palette("colorblind").as_hex() + [
+    '#8b0000',  # dark red
+    '#556b2f',  # dark olive green
+    '#4b0082',  # indigo
+    '#ff6347',  # tomato
+    '#20b2aa',  # light sea green
+    '#8b4513',  # saddle brown
+    '#2f4f4f',  # dark slate gray
+    '#9400d3',  # dark violet
+    '#6a5acd',  # slate blue
+    '#b8860b',  # dark goldenrod
+]
 
 def _tsr_color(idx, n):
+    """Return a color for TSR sweep line idx (cycles if n > 20)."""
     return _CB_PALETTE[idx % len(_CB_PALETTE)]
 
 def _sens_color(idx, n):
+    """Return a color for sensitivity sweep line idx (cycles if n > 20)."""
     return _CB_PALETTE[idx % len(_CB_PALETTE)]
 
 # =============================================================================
@@ -164,8 +190,8 @@ def build_vortex_system(Omega, N=N_PANELS, N_wake=N_WAKE,
             chord     = blade_chord(r_R)
             twist_rad = np.radians(blade_twist(r_R))
 
-            cp_y = r * cosR
-            cp_z = r * sinR
+            cp_y   = r * cosR
+            cp_z   = r * sinR
             cp_rot = np.array([0.0, cp_y, cp_z])
 
             controlpoints.append({
@@ -290,8 +316,6 @@ def solve_circulation(A_u, A_v, A_w, controlpoints, Omega,
     omega   = 0.1
     err     = np.inf
 
-    u_ind = v_ind = w_ind = np.zeros(N_total)
-
     for k in range(max_iter):
         u_ind = A_u @ Gamma
         v_ind = A_v @ Gamma
@@ -394,44 +418,108 @@ def post_process(Gamma, u_ind, v_ind, w_ind, controlpoints, Omega):
     CT = T / (0.5 * rho * U0**2 * A)
     CP = P / (0.5 * rho * U0**3 * A)
 
-    return res, CT, CP
+    # Span-averaged axial induction (columns 0 = a_ax), weighted by panel width
+    mean_a = float(np.sum(res[:, 0] * dr) / np.sum(dr))
+
+    return res, CT, CP, mean_a
 
 # =============================================================================
-# 9.  ROTOR EVALUATOR  (one-stop function)
+# 9.  SINGLE INNER SOLVE  (one fixed wake geometry)
 # =============================================================================
 
-_solver_meta = {}   # label -> (n_iter, converged)
-
-def run_case(TSR, N=N_PANELS, N_wake=N_WAKE, dpsi_deg=DPSI_DEG,
-             a_w=A_WAKE, distribution=DISTRIBUTION, verbose=True,
-             _meta_key=None):
+def _single_solve(TSR, N, N_wake, dpsi_deg, a_w, distribution, verbose):
+    """Build geometry, assemble influence matrix, solve, post-process.
+    Returns (res, CT, CP, mean_a)."""
     Omega = U0 * TSR / Radius
     if verbose:
-        print(f"  Building vortex system  (N={N}, N_wake={N_wake}, "
-              f"dpsi={dpsi_deg}°, a_w={a_w}, dist={distribution}) ...")
+        print(f"    Building vortex system  (N={N}, N_wake={N_wake}, "
+              f"dpsi={dpsi_deg}°, a_w={a_w:.4f}, dist={distribution}) ...")
     cps, rings = build_vortex_system(
         Omega, N=N, N_wake=N_wake, dpsi_deg=dpsi_deg,
         a_w=a_w, distribution=distribution)
 
     if verbose:
-        print(f"  Assembling influence matrix ({len(cps)}×{len(cps)}) ...")
+        print(f"    Assembling influence matrix ({len(cps)}×{len(cps)}) ...")
     A_u, A_v, A_w = assemble_influence_matrix(cps, rings)
 
     if verbose:
-        print(f"  Solving circulation ...")
+        print(f"    Solving circulation ...")
     Gamma, u_ind, v_ind, w_ind, n_iter, converged = solve_circulation(
         A_u, A_v, A_w, cps, Omega)
 
-    if _meta_key is not None:
-        _solver_meta[_meta_key] = (n_iter, converged)
+    res, CT, CP, mean_a = post_process(Gamma, u_ind, v_ind, w_ind, cps, Omega)
+    return res, CT, CP, mean_a, n_iter, converged
 
-    res, CT, CP = post_process(Gamma, u_ind, v_ind, w_ind, cps, Omega)
+# =============================================================================
+# 10.  ROTOR EVALUATOR  (one-stop function with optional outer AW iteration)
+# =============================================================================
+
+_solver_meta = {}   # label -> (n_iter, converged, mean_a, a_w_used, n_outer)
+
+def run_case(TSR, N=N_PANELS, N_wake=N_WAKE, dpsi_deg=DPSI_DEG,
+             a_w=None, distribution=DISTRIBUTION, verbose=True,
+             _meta_key=None):
+    """Solve for one operating point.
+
+    If USE_ITERATED_AW=True and a_w is None, the outer loop iterates
+    a_w toward the mean axial induction of the converged solution.
+    If a_w is supplied explicitly it is always used as a fixed value
+    (this allows the sensitivity study to override USE_ITERATED_AW).
+    """
+    # Determine whether to iterate or use a fixed value
+    fixed_aw = a_w is not None          # caller supplied explicit a_w
+    iterate  = USE_ITERATED_AW and not fixed_aw
+
+    if a_w is None:
+        a_w_run = AW_ITER_INIT if iterate else A_WAKE
+    else:
+        a_w_run = a_w
+
+    if iterate:
+        # ── Outer iteration loop ──────────────────────────────────────────
+        if verbose:
+            print(f"  [AW iter] TSR={TSR}  initial a_w={a_w_run:.4f}")
+        n_outer = 0
+        for outer_k in range(AW_ITER_MAX):
+            n_outer += 1
+            res, CT, CP, mean_a, n_iter, converged = _single_solve(
+                TSR, N, N_wake, dpsi_deg, a_w_run, distribution, verbose)
+            aw_err = abs(mean_a - a_w_run)
+            if verbose:
+                print(f"  [AW iter {outer_k+1}] a_w={a_w_run:.4f}  "
+                      f"mean_a={mean_a:.4f}  err={aw_err:.2e}  "
+                      f"CT={CT:.4f}  CP={CP:.4f}")
+            if aw_err < AW_ITER_TOL:
+                if verbose:
+                    print(f"  [AW iter] Converged: a_w = {mean_a:.4f} "
+                          f"after {outer_k+1} outer iteration(s)")
+                a_w_run = mean_a
+                break
+            a_w_run = mean_a
+        else:
+            if verbose:
+                print(f"  [AW iter] WARNING: outer loop did not converge "
+                      f"after {AW_ITER_MAX} iterations  (err={aw_err:.2e})")
+    else:
+        # ── Fixed wake ────────────────────────────────────────────────────
+        if verbose:
+            print(f"  TSR={TSR}  (fixed a_w={a_w_run:.4f})")
+        res, CT, CP, mean_a, n_iter, converged = _single_solve(
+            TSR, N, N_wake, dpsi_deg, a_w_run, distribution, verbose)
+        n_outer = 1
+
     if verbose:
-        print(f"  TSR={TSR}  CT={CT:.4f}  CP={CP:.4f}")
+        mode_str = f"iterated a_w={a_w_run:.4f}" if iterate else f"fixed a_w={a_w_run:.4f}"
+        print(f"  TSR={TSR}  CT={CT:.4f}  CP={CP:.4f}  "
+              f"mean_a={mean_a:.4f}  ({mode_str})")
+
+    if _meta_key is not None:
+        _solver_meta[_meta_key] = (n_iter, converged, mean_a, a_w_run, n_outer)
+
     return res, CT, CP
 
 # =============================================================================
-# 10.  SAVE / SHOW HELPER
+# 11.  SAVE / SHOW HELPER
 # =============================================================================
 
 LL_RESULTS_PATH = "LLM_results.npz"
@@ -456,10 +544,10 @@ def _skip(name, reason):
     print(f"  [SKIP] {name} — {reason}")
     plt.close("all")
 
-norm_val = 0.5 * rho * U0**2 * Radius   # non-dim denominator for loading
+norm_val = 0.5 * rho * U0**2 * Radius
 
 # =============================================================================
-# 10b.  PDF TABLE HELPER
+# 11b.  PDF TABLE HELPER
 # =============================================================================
 
 def _make_table_pdf(filename, title, headers, rows, col_widths=None,
@@ -485,7 +573,7 @@ def _make_table_pdf(filename, title, headers, rows, col_widths=None,
     foot_style  = ParagraphStyle("Footnote", parent=styles["Normal"],
                                   fontSize=8, textColor=colors.grey, spaceBefore=4)
 
-    story      = []
+    story = []
     story.append(Paragraph(title, title_style))
     story.append(Spacer(1, 0.3*cm))
 
@@ -524,31 +612,45 @@ def _make_table_pdf(filename, title, headers, rows, col_widths=None,
     print(f"  Saved table: {filename}.pdf")
 
 
+def _meta_row(mk, default_aw):
+    """Extract (n_iter, converged, mean_a, a_w_used, n_outer) from _solver_meta."""
+    entry = _solver_meta.get(mk)
+    if entry is None:
+        return "—", True, "—", default_aw, 1
+    n_iter, converged, mean_a, a_w_used, n_outer = entry
+    return n_iter, converged, mean_a, a_w_used, n_outer
+
+
 def save_all_tables():
     print("\n" + "="*60)
     print("Saving summary tables to LLM_tables/ ...")
 
+    aw_mode_str = ("iterated" if USE_ITERATED_AW else f"fixed={A_WAKE}")
+
     if sweep_data_span:
-        headers = [u"\u03bb", "CT", "CP", "iters", "conv."]
+        headers = [u"\u03bb", "CT", "CP", u"\u0101 [-]", "a_w used", "iters", "conv."]
         rows = []
         for TSR in TSR_SWEEP_SPAN:
             if TSR not in sweep_data_span: continue
             mk  = f"tsr_{TSR}"
-            ni, cv = _solver_meta.get(mk, ("—", True))
+            ni, cv, mean_a, aw_used, _ = _meta_row(mk, A_WAKE)
             CT  = tsr_CT_span[TSR_SWEEP_SPAN.index(TSR)]
             CP  = tsr_CP_span[TSR_SWEEP_SPAN.index(TSR)]
-            rows.append([str(TSR), f"{CT:.4f}", f"{CP:.4f}", str(ni),
+            mean_a_str = f"{mean_a:.4f}" if isinstance(mean_a, float) else mean_a
+            rows.append([str(TSR), f"{CT:.4f}", f"{CP:.4f}",
+                         mean_a_str, f"{aw_used:.4f}", str(ni),
                          u"\u2713" if cv else u"\u2717"])
         _make_table_pdf(
             "Table_1_TSR_sweep",
             "Table 1 — TSR Sweep Results (Lifting Line)", headers, rows,
-            col_widths=[60, 80, 80, 60, 60],
+            col_widths=[50, 70, 70, 65, 65, 55, 50],
             footnote=(f"Baseline: N={N_PANELS} panels (cosine), N_wake={N_WAKE} rotations, "
-                      f"dpsi={DPSI_DEG} deg, a_w={A_WAKE}, R={Radius} m, "
-                      f"U0={U0} m/s, B={NBlades} blades."))
+                      f"dpsi={DPSI_DEG} deg, a_w mode={aw_mode_str}, R={Radius} m, "
+                      f"U0={U0} m/s, B={NBlades} blades. "
+                      f"a-bar = span-averaged axial induction (area-weighted)."))
 
     if sens_aw_data:
-        headers = ["a_w", "CT", "CP", "dCT", "dCP", "iters", "conv."]
+        headers = ["a_w input", "CT", "CP", u"\u0101 [-]", "dCT", "dCP", "iters", "conv."]
         ref_CT  = sens_aw_data.get(A_WAKE, (None, None, None))[1]
         ref_CP  = sens_aw_data.get(A_WAKE, (None, None, None))[2]
         rows = []
@@ -556,20 +658,24 @@ def save_all_tables():
             if aw not in sens_aw_data: continue
             _, CT, CP = sens_aw_data[aw]
             mk = f"aw_{aw}"
-            ni, cv = _solver_meta.get(mk, ("—", True))
+            ni, cv, mean_a, aw_used, _ = _meta_row(mk, aw)
             dCT = f"{CT - ref_CT:+.4f}" if ref_CT is not None else "—"
             dCP = f"{CP - ref_CP:+.4f}" if ref_CP is not None else "—"
-            rows.append([f"{aw:.2f}", f"{CT:.4f}", f"{CP:.4f}", dCT, dCP,
+            mean_a_str = f"{mean_a:.4f}" if isinstance(mean_a, float) else mean_a
+            rows.append([f"{aw:.2f}", f"{CT:.4f}", f"{CP:.4f}",
+                         mean_a_str, dCT, dCP,
                          str(ni), u"\u2713" if cv else u"\u2717"])
         _make_table_pdf(
             "Table_2_sensitivity_aw",
             f"Table 2 — Sensitivity: Wake Convection Speed a_w  (TSR={SENS_TSR})",
-            headers, rows, col_widths=[55, 70, 70, 65, 65, 55, 55],
-            footnote=(f"Reference: a_w={A_WAKE}. dCT = CT - CT_ref,  dCP = CP - CP_ref. "
-                      f"Other params: N={N_PANELS}, N_wake={N_WAKE}, dpsi={DPSI_DEG} deg."))
+            headers, rows, col_widths=[55, 65, 65, 60, 60, 60, 50, 45],
+            footnote=(f"Note: a_w sensitivity always uses fixed input values. "
+                      f"Reference: a_w={A_WAKE}. "
+                      f"Other params: N={N_PANELS}, N_wake={N_WAKE}, dpsi={DPSI_DEG} deg. "
+                      f"a-bar = span-averaged axial induction."))
 
     if sens_disc_data:
-        headers = ["N", "dist.", "CT", "CP", "dCT", "dCP", "iters", "conv."]
+        headers = ["N", "dist.", "CT", "CP", u"\u0101 [-]", "dCT", "dCP", "iters", "conv."]
         ref_key = (N_PANELS, "cosine")
         ref_CT  = sens_disc_data[ref_key][1] if ref_key in sens_disc_data else None
         ref_CP  = sens_disc_data[ref_key][2] if ref_key in sens_disc_data else None
@@ -579,20 +685,25 @@ def save_all_tables():
                 if (N, dist) not in sens_disc_data: continue
                 _, CT, CP = sens_disc_data[(N, dist)]
                 mk = f"disc_{N}_{dist}"
-                ni, cv = _solver_meta.get(mk, ("—", True))
+                ni, cv, mean_a, aw_used, _ = _meta_row(mk, A_WAKE)
                 dCT = f"{CT - ref_CT:+.4f}" if ref_CT is not None else "—"
                 dCP = f"{CP - ref_CP:+.4f}" if ref_CP is not None else "—"
+                mean_a_str = f"{mean_a:.4f}" if isinstance(mean_a, float) else mean_a
                 rows.append([str(N), dist.capitalize(), f"{CT:.4f}", f"{CP:.4f}",
-                             dCT, dCP, str(ni), u"\u2713" if cv else u"\u2717"])
+                             mean_a_str, dCT, dCP,
+                             str(ni), u"\u2713" if cv else u"\u2717"])
         _make_table_pdf(
             "Table_3_sensitivity_disc",
             f"Table 3 — Sensitivity: Blade Discretisation  (TSR={SENS_TSR})",
-            headers, rows, col_widths=[40, 65, 65, 65, 60, 60, 50, 50],
+            headers, rows, col_widths=[35, 58, 58, 58, 55, 55, 55, 45, 42],
             footnote=(f"Reference: N={N_PANELS}, cosine. "
-                      f"Other params: N_wake={N_WAKE}, dpsi={DPSI_DEG} deg, a_w={A_WAKE}."))
+                      f"Other params: N_wake={N_WAKE}, dpsi={DPSI_DEG} deg, "
+                      f"a_w mode={aw_mode_str}. "
+                      f"a-bar = span-averaged axial induction."))
 
     if sens_dpsi_data:
-        headers = ["dpsi [deg]", "N_steps", "CT", "CP", "dCT", "dCP", "iters", "conv."]
+        headers = ["dpsi [deg]", "N_steps", "CT", "CP", u"\u0101 [-]",
+                   "dCT", "dCP", "iters", "conv."]
         ref_CT  = sens_dpsi_data.get(DPSI_DEG, (None, None, None))[1]
         ref_CP  = sens_dpsi_data.get(DPSI_DEG, (None, None, None))[2]
         rows = []
@@ -600,21 +711,26 @@ def save_all_tables():
             if dpsi not in sens_dpsi_data: continue
             _, CT, CP = sens_dpsi_data[dpsi]
             mk = f"dpsi_{dpsi}"
-            ni, cv = _solver_meta.get(mk, ("—", True))
+            ni, cv, mean_a, aw_used, _ = _meta_row(mk, A_WAKE)
             n_steps = int(round(360.0 / dpsi))
             dCT = f"{CT - ref_CT:+.4f}" if ref_CT is not None else "—"
             dCP = f"{CP - ref_CP:+.4f}" if ref_CP is not None else "—"
+            mean_a_str = f"{mean_a:.4f}" if isinstance(mean_a, float) else mean_a
             rows.append([f"{dpsi:.1f}", str(n_steps), f"{CT:.4f}", f"{CP:.4f}",
-                         dCT, dCP, str(ni), u"\u2713" if cv else u"\u2717"])
+                         mean_a_str, dCT, dCP,
+                         str(ni), u"\u2713" if cv else u"\u2717"])
         _make_table_pdf(
             "Table_4_sensitivity_dpsi",
             f"Table 4 — Sensitivity: Azimuthal Step  (TSR={SENS_TSR})",
-            headers, rows, col_widths=[65, 60, 65, 65, 60, 60, 50, 50],
+            headers, rows, col_widths=[58, 52, 58, 58, 55, 55, 55, 45, 42],
             footnote=(f"Reference: dpsi={DPSI_DEG} deg. "
-                      f"Other params: N={N_PANELS}, N_wake={N_WAKE}, a_w={A_WAKE}."))
+                      f"Other params: N={N_PANELS}, N_wake={N_WAKE}, "
+                      f"a_w mode={aw_mode_str}. "
+                      f"a-bar = span-averaged axial induction."))
 
     if sens_wake_data:
-        headers = ["N_wake", "N_filaments", "CT", "CP", "dCT", "dCP", "iters", "conv."]
+        headers = ["N_wake", "N_fil.", "CT", "CP", u"\u0101 [-]",
+                   "dCT", "dCP", "iters", "conv."]
         ref_CT  = sens_wake_data.get(N_WAKE, (None, None, None))[1]
         ref_CP  = sens_wake_data.get(N_WAKE, (None, None, None))[2]
         rows = []
@@ -622,41 +738,43 @@ def save_all_tables():
             if nw not in sens_wake_data: continue
             _, CT, CP = sens_wake_data[nw]
             mk = f"nwake_{nw}"
-            ni, cv = _solver_meta.get(mk, ("—", True))
+            ni, cv, mean_a, aw_used, _ = _meta_row(mk, A_WAKE)
             n_fil = int(round(nw * 360.0 / DPSI_DEG))
             dCT = f"{CT - ref_CT:+.4f}" if ref_CT is not None else "—"
             dCP = f"{CP - ref_CP:+.4f}" if ref_CP is not None else "—"
+            mean_a_str = f"{mean_a:.4f}" if isinstance(mean_a, float) else mean_a
             rows.append([str(nw), str(n_fil), f"{CT:.4f}", f"{CP:.4f}",
-                         dCT, dCP, str(ni), u"\u2713" if cv else u"\u2717"])
+                         mean_a_str, dCT, dCP,
+                         str(ni), u"\u2713" if cv else u"\u2717"])
         _make_table_pdf(
             "Table_5_sensitivity_wake",
             f"Table 5 — Sensitivity: Wake Length  (TSR={SENS_TSR})",
-            headers, rows, col_widths=[60, 75, 65, 65, 60, 60, 50, 50],
+            headers, rows, col_widths=[52, 48, 58, 58, 55, 55, 55, 45, 42],
             footnote=(f"Reference: N_wake={N_WAKE}. "
-                      f"Other params: N={N_PANELS}, dpsi={DPSI_DEG} deg, a_w={A_WAKE}."))
+                      f"Other params: N={N_PANELS}, dpsi={DPSI_DEG} deg, "
+                      f"a_w mode={aw_mode_str}. "
+                      f"a-bar = span-averaged axial induction."))
 
     print("All tables saved.")
 
 
 # =============================================================================
-# 11.  MAIN COMPUTATIONS
+# 12.  MAIN COMPUTATIONS
 # =============================================================================
 
-# ── Containers ────────────────────────────────────────────────────────────────
 sweep_data_span = {}
 tsr_CT_span     = []
 tsr_CP_span     = []
-
-# Performance sweep containers (λ=4..12 step 0.5)
 tsr_CT_perf     = []
 tsr_CP_perf     = []
-
 sens_aw_data    = {}
 sens_disc_data  = {}
 sens_dpsi_data  = {}
 sens_wake_data  = {}
 
-# ── Spanwise TSR sweep (λ=6,8,10 — used for all spanwise plots) ──────────────
+print(f"\nWake convection mode: {'ITERATED a_w' if USE_ITERATED_AW else f'FIXED a_w = {A_WAKE}'}")
+
+# ── Spanwise TSR sweep ────────────────────────────────────────────────────────
 if RUN_TSR_SWEEP_SPAN:
     print("\n" + "="*60)
     print(f"Running spanwise TSR sweep {TSR_SWEEP_SPAN} ...")
@@ -669,14 +787,13 @@ if RUN_TSR_SWEEP_SPAN:
     tsr_CT_span = np.array(tsr_CT_span)
     tsr_CP_span = np.array(tsr_CP_span)
 
-# ── Performance sweep (λ=4..12 step 0.5) — ONLY for CT/CP-λ plots ────────────
+# ── Performance sweep ─────────────────────────────────────────────────────────
 if RUN_TSR_SWEEP_PERF:
     print("\n" + "="*60)
     print(f"Running performance TSR sweep λ = {TSR_SWEEP_PERF[0]:.1f} … "
           f"{TSR_SWEEP_PERF[-1]:.1f}  (step 0.5) ...")
     for TSR in TSR_SWEEP_PERF:
         print(f"\n  TSR = {TSR}:")
-        # Re-use result from span sweep if already computed (avoids duplicate work)
         if TSR in sweep_data_span:
             idx = TSR_SWEEP_SPAN.index(TSR)
             tsr_CT_perf.append(float(tsr_CT_span[idx]))
@@ -691,15 +808,17 @@ if RUN_TSR_SWEEP_PERF:
     tsr_CP_perf = np.array(tsr_CP_perf)
 
 # ── Sensitivity: convection speed (a_w) ──────────────────────────────────────
+# Note: sensitivity study always uses fixed a_w values regardless of USE_ITERATED_AW
 if RUN_SENS_CONV_SPEED:
     print("\n" + "="*60)
     print(f"Running sensitivity: convection speed (TSR={SENS_TSR}) ...")
+    print(f"  Note: a_w sensitivity always uses fixed input values.")
     for a_w in SENS_AW_LIST:
         print(f"\n  a_w = {a_w}:")
         res, CT, CP = run_case(SENS_TSR, a_w=a_w, _meta_key=f"aw_{a_w}")
         sens_aw_data[a_w] = (res, CT, CP)
 
-# ── Sensitivity: blade discretisation (N + constant vs cosine) ───────────────
+# ── Sensitivity: blade discretisation ────────────────────────────────────────
 if RUN_SENS_DISC:
     print("\n" + "="*60)
     print(f"Running sensitivity: discretisation (TSR={SENS_TSR}) ...")
@@ -710,7 +829,7 @@ if RUN_SENS_DISC:
                                    _meta_key=f"disc_{N}_{dist}")
             sens_disc_data[(N, dist)] = (res, CT, CP)
 
-# ── Sensitivity: azimuthal discretisation (dpsi) ─────────────────────────────
+# ── Sensitivity: azimuthal step ───────────────────────────────────────────────
 if RUN_SENS_AZIMUTHAL:
     print("\n" + "="*60)
     print(f"Running sensitivity: azimuthal step (TSR={SENS_TSR}) ...")
@@ -719,7 +838,7 @@ if RUN_SENS_AZIMUTHAL:
         res, CT, CP = run_case(SENS_TSR, dpsi_deg=dpsi, _meta_key=f"dpsi_{dpsi}")
         sens_dpsi_data[dpsi] = (res, CT, CP)
 
-# ── Sensitivity: wake length (N_wake) ────────────────────────────────────────
+# ── Sensitivity: wake length ──────────────────────────────────────────────────
 if RUN_SENS_WAKE_LENGTH:
     print("\n" + "="*60)
     print(f"Running sensitivity: wake length (TSR={SENS_TSR}) ...")
@@ -729,7 +848,7 @@ if RUN_SENS_WAKE_LENGTH:
         sens_wake_data[nw] = (res, CT, CP)
 
 # =============================================================================
-# 12.  PLOTS — SECTION LL.1  (inflow angle and AoA)
+# 13.  PLOTS — LL.1  (inflow angle and AoA)
 # =============================================================================
 
 n_span = len(TSR_SWEEP_SPAN)
@@ -750,7 +869,7 @@ elif PLOT_LL_1:
     _skip("PLOT_LL_1", "span sweep data missing")
 
 # =============================================================================
-# 13.  PLOTS — SECTION LL.2  (induction factors)
+# 14.  PLOTS — LL.2  (induction factors)
 # =============================================================================
 
 if PLOT_LL_2 and sweep_data_span:
@@ -769,7 +888,7 @@ elif PLOT_LL_2:
     _skip("PLOT_LL_2", "span sweep data missing")
 
 # =============================================================================
-# 14.  PLOTS — SECTION LL.3  (loading distributions)
+# 15.  PLOTS — LL.3  (loading distributions)
 # =============================================================================
 
 if PLOT_LL_3 and sweep_data_span:
@@ -788,14 +907,14 @@ elif PLOT_LL_3:
     _skip("PLOT_LL_3", "span sweep data missing")
 
 # =============================================================================
-# 15.  PLOTS — SECTION LL.4  (circulation distribution)
+# 16.  PLOTS — LL.4  (circulation)
 # =============================================================================
 
 if PLOT_LL_4 and sweep_data_span:
     fig, ax = plt.subplots(figsize=(8, 5))
     for k, TSR in enumerate(TSR_SWEEP_SPAN):
-        res   = sweep_data_span[TSR]
-        Omega = U0 * TSR / Radius
+        res    = sweep_data_span[TSR]
+        Omega  = U0 * TSR / Radius
         norm_G = np.pi * U0**2 / (NBlades * Omega)
         ax.plot(res[:, 2], res[:, 5] / norm_G, color=_tsr_color(k, n_span), lw=2,
                 label=rf"$\lambda={TSR}$")
@@ -807,39 +926,31 @@ elif PLOT_LL_4:
     _skip("PLOT_LL_4", "span sweep data missing")
 
 # =============================================================================
-# 16.  PLOTS — SECTION LL.5  (CT and CP)
+# 17.  PLOTS — LL.5  (CT and CP vs TSR)
 # =============================================================================
 
 if PLOT_LL_5_PERF and len(tsr_CT_perf) > 0:
     for vals, ylabel, fname, col in [
             (tsr_CT_perf, r"$C_T$ [-]", "LL_5c_CT_vs_TSR", "#0000FF"),
             (tsr_CP_perf, r"$C_P$ [-]", "LL_5d_CP_vs_TSR", "#2ca02c")]:
-
         fig, ax = plt.subplots(figsize=(9, 5))
-
-        # Main curve: all λ values
-        ax.plot(TSR_SWEEP_PERF, vals, "o-", color=col, lw=2, ms=5,
-                zorder=2, label="_nolegend_")
-
+        ax.plot(TSR_SWEEP_PERF, vals, "o-", color=col, lw=2, ms=5, zorder=2)
         ax.set_xlabel(r"Tip-speed ratio $\lambda$ [-]")
         ax.set_ylabel(ylabel)
         ax.set_xlim(3.5, 12.5)
         ax.set_xticks(np.arange(4, 13, 1))
-        ax.legend(fontsize=9)
         ax.grid(True)
         fig.tight_layout()
         save_fig(fname)
 elif PLOT_LL_5_PERF:
-    _skip("PLOT_LL_5_PERF",
-          "performance sweep data missing — set RUN_TSR_SWEEP_PERF=True")
+    _skip("PLOT_LL_5_PERF", "performance sweep data missing")
 
 # =============================================================================
-# 17.  PLOTS — SENSITIVITY: convection speed (a_w)
+# 18.  PLOTS — SENSITIVITY: convection speed
 # =============================================================================
 
 if PLOT_SENS_AW and sens_aw_data:
     n_aw = len(SENS_AW_LIST)
-
     for qty_col, ylabel, fname in [
             (0, r"$a$ [-]",                               "Sens_AW_a_axial_induction"),
             (3, r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$", "Sens_AW_b_normal_loading"),
@@ -864,18 +975,16 @@ if PLOT_SENS_AW and sens_aw_data:
     axes[1].set_xlabel(r"Wake induction $a_w$ [-]"); axes[1].set_ylabel(r"$C_P$ [-]")
     axes[0].grid(True); axes[1].grid(True)
     fig.tight_layout(); save_fig("Sens_AW_d_CT_CP_vs_aw")
-
 elif PLOT_SENS_AW:
     _skip("PLOT_SENS_AW", "convection speed sensitivity data missing")
 
 # =============================================================================
-# 18.  PLOTS — SENSITIVITY: blade discretisation
+# 19.  PLOTS — SENSITIVITY: discretisation
 # =============================================================================
 
 if PLOT_SENS_DISC and sens_disc_data:
     n_N = len(SENS_N_LIST)
 
-    # A) Panel count — cosine distribution
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
     for idx, N in enumerate(SENS_N_LIST):
         if (N, "cosine") not in sens_disc_data: continue
@@ -893,7 +1002,6 @@ if PLOT_SENS_DISC and sens_disc_data:
     axes[0].grid(True); axes[1].grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_a_panel_count_cosine")
 
-    # B) Constant vs cosine at baseline N
     N_ref = N_PANELS
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
     for dist, col, ls in [("cosine", "#0000FF", "-"), ("constant", "#d62728", "--")]:
@@ -911,7 +1019,6 @@ if PLOT_SENS_DISC and sens_disc_data:
     axes[0].grid(True); axes[1].grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_b_cosine_vs_constant")
 
-    # C) CT and CP convergence vs N (cosine only)
     N_vals = [N for N in SENS_N_LIST if (N, "cosine") in sens_disc_data]
     ct_N   = [sens_disc_data[(N, "cosine")][1] for N in N_vals]
     cp_N   = [sens_disc_data[(N, "cosine")][2] for N in N_vals]
@@ -921,17 +1028,15 @@ if PLOT_SENS_DISC and sens_disc_data:
     axes[0].set_xlabel("N panels"); axes[0].set_ylabel(r"$C_T$ [-]"); axes[0].grid(True)
     axes[1].set_xlabel("N panels"); axes[1].set_ylabel(r"$C_P$ [-]"); axes[1].grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_c_CT_CP_convergence_vs_N")
-
 elif PLOT_SENS_DISC:
     _skip("PLOT_SENS_DISC", "discretisation sensitivity data missing")
 
 # =============================================================================
-# 19.  PLOTS — SENSITIVITY: azimuthal step (dpsi)
+# 20.  PLOTS — SENSITIVITY: azimuthal step
 # =============================================================================
 
 if PLOT_SENS_DPSI and sens_dpsi_data:
     n_dpsi = len(SENS_DPSI_LIST)
-
     for qty_col, ylabel, fname in [
             (0, r"$a$ [-]",                               "Sens_DPSI_a_axial_induction"),
             (3, r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$", "Sens_DPSI_b_normal_loading")]:
@@ -955,17 +1060,15 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
     axes[1].set_xlabel(r"$\Delta\psi$ [deg]"); axes[1].set_ylabel(r"$C_P$ [-]")
     axes[0].grid(True); axes[1].grid(True)
     fig.tight_layout(); save_fig("Sens_DPSI_c_CT_CP_vs_dpsi")
-
 elif PLOT_SENS_DPSI:
     _skip("PLOT_SENS_DPSI", "azimuthal step sensitivity data missing")
 
 # =============================================================================
-# 20.  PLOTS — SENSITIVITY: wake length (N_wake)
+# 21.  PLOTS — SENSITIVITY: wake length
 # =============================================================================
 
 if PLOT_SENS_WAKE and sens_wake_data:
     n_nw = len(SENS_NWAKE_LIST)
-
     for qty_col, ylabel, fname in [
             (0, r"$a$ [-]",                               "Sens_Wake_a_axial_induction"),
             (3, r"$C_n = F_n\,/\,(½\rho U_\infty^2 R)$", "Sens_Wake_b_normal_loading")]:
@@ -989,12 +1092,11 @@ if PLOT_SENS_WAKE and sens_wake_data:
     axes[1].set_xlabel(r"Wake length $N_{wake}$ [rotations]"); axes[1].set_ylabel(r"$C_P$ [-]")
     axes[0].grid(True); axes[1].grid(True)
     fig.tight_layout(); save_fig("Sens_Wake_c_CT_CP_convergence_vs_Nwake")
-
 elif PLOT_SENS_WAKE:
     _skip("PLOT_SENS_WAKE", "wake length sensitivity data missing")
 
 # =============================================================================
-# 21.  SAVE RESULTS TO NPZ
+# 22.  SAVE RESULTS TO NPZ
 # =============================================================================
 
 def save_ll_results(path=LL_RESULTS_PATH):
@@ -1004,15 +1106,13 @@ def save_ll_results(path=LL_RESULTS_PATH):
         cfg_RootLocation_R=RootLocation_R, cfg_TipLocation_R=TipLocation_R,
         cfg_Pitch=Pitch, cfg_N_PANELS=N_PANELS, cfg_N_WAKE=N_WAKE,
         cfg_DPSI_DEG=DPSI_DEG, cfg_A_WAKE=A_WAKE,
-        # Spanwise sweep (λ=6,8,10)
+        cfg_USE_ITERATED_AW=np.array(USE_ITERATED_AW),
         sweep_tsrs=np.array(TSR_SWEEP_SPAN, dtype=float),
         tsr_CT=tsr_CT_span if len(tsr_CT_span) > 0 else np.array([]),
         tsr_CP=tsr_CP_span if len(tsr_CP_span) > 0 else np.array([]),
-        # Performance sweep (λ=4..12 step 0.5)
         perf_tsrs=np.array(TSR_SWEEP_PERF, dtype=float),
         perf_CT=tsr_CT_perf if len(tsr_CT_perf) > 0 else np.array([]),
         perf_CP=tsr_CP_perf if len(tsr_CP_perf) > 0 else np.array([]),
-        # Sensitivity arrays
         sens_aw_vals   =np.array(SENS_AW_LIST,    dtype=float),
         sens_aw_CT     =np.array([sens_aw_data[aw][1]  for aw in SENS_AW_LIST   if aw  in sens_aw_data],   dtype=float),
         sens_aw_CP     =np.array([sens_aw_data[aw][2]  for aw in SENS_AW_LIST   if aw  in sens_aw_data],   dtype=float),
@@ -1054,7 +1154,7 @@ else:
     print("\nSAVE_LL_RESULTS=False — ll_results.npz not written.")
 
 # =============================================================================
-# 22.  SAVE PDF TABLES
+# 23.  SAVE PDF TABLES
 # =============================================================================
 
 if SAVE_TABLES_PDF:
