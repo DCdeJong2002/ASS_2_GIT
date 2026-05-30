@@ -35,9 +35,9 @@ Pitch          = -2.0          # blade pitch [deg]
 
 # ── Visualisation parameters ──────────────────────────────────────────────────
 TSR      = 8       # tip-speed ratio
-N        = 10      # spanwise panels per blade
+N        = 20      # spanwise panels per blade
 N_wake   = 2       # number of full wake rotations shown
-dpsi_deg = 10.0    # azimuthal step [deg]
+dpsi_deg = 90.0    # azimuthal step [deg]
 a_w      = 0.25    # frozen-wake axial induction (convection factor)
 
 # ── Output ────────────────────────────────────────────────────────────────────

@@ -43,7 +43,7 @@ R_CORE       = 1e-3           # vortex core radius (Rankine) [m]
 # ── Wake convection speed mode ────────────────────────────────────────────────
 # False -> use A_WAKE directly (fixed frozen wake)
 # True  -> iterate outer loop until a_w converges to mean axial induction
-USE_ITERATED_AW = True
+USE_ITERATED_AW = False
 AW_ITER_TOL     = 1e-3        # outer loop convergence tolerance on a_w
 AW_ITER_MAX     = 20          # maximum outer iterations
 AW_ITER_INIT    = 0.25        # initial guess for a_w when iterating
@@ -56,7 +56,7 @@ TSR_SWEEP_PERF = list(np.arange(4.0, 12.5, 0.5))   # [4.0, 4.5, …, 12.0]
 
 # ── Sensitivity sweep parameters (all run at TSR=8) ──────────────────────────
 SENS_TSR          = 8
-SENS_N_LIST       = [5, 8, 10, 13, 15, 18, 20, 25, 30, 50]
+SENS_N_LIST       = [5, 8, 10, 13, 15, 18, 20, 25, 30, 50, 75, 100, 125, 150]
 SENS_AW_LIST      = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
 SENS_DPSI_LIST    = [1.0, 2.5, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0,
                      60.0, 70.0, 80.0, 90.0]
@@ -931,8 +931,8 @@ elif PLOT_LL_4:
 
 if PLOT_LL_5_PERF and len(tsr_CT_perf) > 0:
     for vals, ylabel, fname, col in [
-            (tsr_CT_perf, r"$C_T$ [-]", "LL_5c_CT_vs_TSR", "#0000FF"),
-            (tsr_CP_perf, r"$C_P$ [-]", "LL_5d_CP_vs_TSR", "#2ca02c")]:
+            (tsr_CT_perf, r"$C_T$ [-]", "LL_5c_CT_vs_TSR", "#0173b2"),
+            (tsr_CP_perf, r"$C_P$ [-]", "LL_5d_CP_vs_TSR", "#029e73")]:
         fig, ax = plt.subplots(figsize=(9, 5))
         ax.plot(TSR_SWEEP_PERF, vals, "o-", color=col, lw=2, ms=5, zorder=2)
         ax.set_xlabel(r"Tip-speed ratio $\lambda$ [-]")
@@ -1092,7 +1092,7 @@ if PLOT_SENS_DISC and sens_disc_data:
     # ── Cosine vs constant: Cn spanwise ───────────────────────────────────
     N_ref = N_PANELS
     fig, ax = plt.subplots(figsize=(8, 5))
-    for dist, col, ls in [("cosine", "#0000FF", "-"), ("constant", "#d62728", "--")]:
+    for dist, col, ls in [("cosine", "#0173b2", "-"), ("constant", "#d55e00", "--")]:
         if (N_ref, dist) not in sens_disc_data: continue
         res, CT, CP = sens_disc_data[(N_ref, dist)]
         ax.plot(res[:, 2], res[:, 3] / norm_val, color=col, lw=2, ls=ls,
@@ -1103,7 +1103,7 @@ if PLOT_SENS_DISC and sens_disc_data:
 
     # ── Cosine vs constant: a spanwise ────────────────────────────────────
     fig, ax = plt.subplots(figsize=(8, 5))
-    for dist, col, ls in [("cosine", "#0000FF", "-"), ("constant", "#d62728", "--")]:
+    for dist, col, ls in [("cosine", "#0173b2", "-"), ("constant", "#d55e00", "--")]:
         if (N_ref, dist) not in sens_disc_data: continue
         res, CT, CP = sens_disc_data[(N_ref, dist)]
         ax.plot(res[:, 2], res[:, 0], color=col, lw=2, ls=ls,
@@ -1117,13 +1117,13 @@ if PLOT_SENS_DISC and sens_disc_data:
     ct_N   = [sens_disc_data[(N, "cosine")][1] for N in N_vals]
     cp_N   = [sens_disc_data[(N, "cosine")][2] for N in N_vals]
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(N_vals, ct_N, "o-", color="#0000FF", lw=2)
+    ax.plot(N_vals, ct_N, "o-", color="#0173b2", lw=2)
     ax.set_xlabel("N panels"); ax.set_ylabel(r"$C_T$ [-]"); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_c1_CT_convergence_vs_N")
 
     # ── CP convergence vs N ───────────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(N_vals, cp_N, "o-", color="#2ca02c", lw=2)
+    ax.plot(N_vals, cp_N, "o-", color="#029e73", lw=2)
     ax.set_xlabel("N panels"); ax.set_ylabel(r"$C_P$ [-]"); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_c2_CP_convergence_vs_N")
 
@@ -1156,12 +1156,12 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
     cp_vals   = [sens_dpsi_data[d][2] for d in dpsi_vals]
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(dpsi_vals, ct_vals, "o-", color="#0000FF", lw=2)
+    ax.plot(dpsi_vals, ct_vals, "o-", color="#0173b2", lw=2)
     ax.set_xlabel(r"$\Delta\psi$ [deg]"); ax.set_ylabel(r"$C_T$ [-]"); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_DPSI_c1_CT_vs_dpsi")
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(dpsi_vals, cp_vals, "o-", color="#2ca02c", lw=2)
+    ax.plot(dpsi_vals, cp_vals, "o-", color="#029e73", lw=2)
     ax.set_xlabel(r"$\Delta\psi$ [deg]"); ax.set_ylabel(r"$C_P$ [-]"); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_DPSI_c2_CP_vs_dpsi")
 
@@ -1173,36 +1173,64 @@ elif PLOT_SENS_DPSI:
 # =============================================================================
 
 if PLOT_SENS_WAKE and sens_wake_data:
-    n_nw = len(SENS_NWAKE_LIST)
+    n_nw    = len(SENS_NWAKE_LIST)
+    nw_vals = SENS_NWAKE_LIST
+    ct_vals = [sens_wake_data[nw][1] for nw in nw_vals]
+    cp_vals = [sens_wake_data[nw][2] for nw in nw_vals]
+
+    # Convergence threshold: N_wake where CT and CP are within tol of the
+    # last (finest) value — used to annotate the spanwise plots
+    _ct_ref = ct_vals[-1]
+    _cp_ref = cp_vals[-1]
+    _conv_tol = 0.005   # 0.5% change threshold
+    _nw_conv_CT = next((nw for nw, ct in zip(nw_vals, ct_vals)
+                        if abs(ct - _ct_ref) < _conv_tol), nw_vals[-1])
+    _nw_conv_CP = next((nw for nw, cp in zip(nw_vals, cp_vals)
+                        if abs(cp - _cp_ref) < _conv_tol), nw_vals[-1])
+
+    # ── Spanwise distributions — with CT and CP convergence info in legend ─
     for qty_col, ylabel, fname in [
             (0, r"$a$ [-]",
              "Sens_Wake_a_axial_induction"),
             (3, r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$ [-]",
              "Sens_Wake_b_normal_loading")]:
-        fig, ax = plt.subplots(figsize=(8, 5))
+        fig, ax = plt.subplots(figsize=(9, 5))
         for idx, nw in enumerate(SENS_NWAKE_LIST):
             res, CT, CP = sens_wake_data[nw]
             y = res[:, qty_col] / norm_val if qty_col == 3 else res[:, qty_col]
             ax.plot(res[:, 2], y, color=_sens_color(idx, n_nw), lw=2,
-                    label=rf"$N_{{wake}}={nw}$  $C_T={CT:.3f}$")
+                    label=rf"$N_{{wake}}={nw}$  $C_T={CT:.3f}$  $C_P={CP:.3f}$")
+        # Annotate converged N_wake values inside the plot
+        ax.text(0.97, 0.97,
+                rf"$C_T$ converged at $N_{{wake}}={_nw_conv_CT}$" + "\n"
+                + rf"$C_P$ converged at $N_{{wake}}={_nw_conv_CP}$",
+                transform=ax.transAxes, fontsize=8,
+                va="top", ha="right",
+                bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#949494",
+                          alpha=0.85))
         ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
-        ax.legend(fontsize=8); ax.grid(True)
+        ax.legend(fontsize=7, bbox_to_anchor=(1.01, 1), loc="upper left")
+        ax.grid(True)
         fig.tight_layout(); save_fig(fname)
 
-    nw_vals = SENS_NWAKE_LIST
-    ct_vals = [sens_wake_data[nw][1] for nw in nw_vals]
-    cp_vals = [sens_wake_data[nw][2] for nw in nw_vals]
-
+    # ── CT convergence vs N_wake ──────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(nw_vals, ct_vals, "o-", color="#0000FF", lw=2)
+    ax.plot(nw_vals, ct_vals, "o-", color="#0173b2", lw=2)
+    ax.axvline(_nw_conv_CT, color="#949494", ls="--", lw=1.2,
+               label=rf"Converged at $N_{{wake}}={_nw_conv_CT}$")
+    ax.axhline(_ct_ref, color="#949494", ls=":", lw=1.0)
     ax.set_xlabel(r"Wake length $N_{wake}$ [rotations]")
-    ax.set_ylabel(r"$C_T$ [-]"); ax.grid(True)
+    ax.set_ylabel(r"$C_T$ [-]"); ax.legend(fontsize=9); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Wake_c1_CT_convergence_vs_Nwake")
 
+    # ── CP convergence vs N_wake ──────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(nw_vals, cp_vals, "o-", color="#2ca02c", lw=2)
+    ax.plot(nw_vals, cp_vals, "o-", color="#029e73", lw=2)
+    ax.axvline(_nw_conv_CP, color="#949494", ls="--", lw=1.2,
+               label=rf"Converged at $N_{{wake}}={_nw_conv_CP}$")
+    ax.axhline(_cp_ref, color="#949494", ls=":", lw=1.0)
     ax.set_xlabel(r"Wake length $N_{wake}$ [rotations]")
-    ax.set_ylabel(r"$C_P$ [-]"); ax.grid(True)
+    ax.set_ylabel(r"$C_P$ [-]"); ax.legend(fontsize=9); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Wake_c2_CP_convergence_vs_Nwake")
 
 elif PLOT_SENS_WAKE:
