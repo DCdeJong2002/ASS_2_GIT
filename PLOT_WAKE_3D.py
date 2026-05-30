@@ -43,11 +43,11 @@ dpsi_deg = 90.0    # azimuthal step [deg]  (used for single-panel figures)
 a_w      = 0.25    # frozen-wake axial induction (convection factor)
 
 # ── Comparison figure: three azimuthal discretisations shown side by side ─────
-COMPARE_DPSI = [2.5, 10.0, 90.0]   # Δψ values [deg] for the 3-panel comparison
+COMPARE_DPSI = [2.0, 10.0, 90.0]   # Δψ values [deg] for the 3-panel comparison
 
 # ── Output toggles ────────────────────────────────────────────────────────────
 SAVE_PLOTLY_HTML      = False   # single-panel interactive Plotly HTML
-SAVE_COMPARISON_HTML  = False   # three-panel interactive Plotly HTML comparison
+SAVE_COMPARISON_HTML  = True   # three-panel interactive Plotly HTML comparison
 
 OUTPUT_HTML            = "vortex_geometry.html"
 OUTPUT_REPORT          = "vortex_geometry_report.pdf"
