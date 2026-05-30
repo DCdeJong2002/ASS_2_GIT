@@ -3,8 +3,10 @@ VortexGeometry.py  —  AE4135 Rotor/Wake Aerodynamics, Assignment 2
 Interactive 3-D visualisation of the frozen vortex wake geometry.
 
 Run:  python VortexGeometry.py
-      → opens vortex_geometry.html in your browser
-      → saves vortex_geometry_report.pdf  (publication-quality static figure)
+      → opens vortex_geometry.html in your browser         (if SAVE_PLOTLY_HTML = True)
+      → saves vortex_geometry_report.pdf                   (publication-quality static figure)
+      → saves vortex_geometry_comparison.pdf               (3-panel Δψ comparison figure)
+      → opens vortex_geometry_comparison.html              (if SAVE_COMPARISON_HTML = True)
 
 Requires:  numpy  plotly  matplotlib  seaborn
            pip install plotly matplotlib seaborn
@@ -13,11 +15,11 @@ Requires:  numpy  plotly  matplotlib  seaborn
 import os
 import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
 import seaborn as sns
 
@@ -37,18 +39,24 @@ Pitch          = -2.0          # blade pitch [deg]
 TSR      = 8       # tip-speed ratio
 N        = 20      # spanwise panels per blade
 N_wake   = 2       # number of full wake rotations shown
-dpsi_deg = 90.0    # azimuthal step [deg]
+dpsi_deg = 90.0    # azimuthal step [deg]  (used for single-panel figures)
 a_w      = 0.25    # frozen-wake axial induction (convection factor)
 
-# ── Output ────────────────────────────────────────────────────────────────────
-OUTPUT_HTML   = "vortex_geometry.html"
-OUTPUT_REPORT = "vortex_geometry_report.pdf"
+# ── Comparison figure: three azimuthal discretisations shown side by side ─────
+COMPARE_DPSI = [2.5, 10.0, 90.0]   # Δψ values [deg] for the 3-panel comparison
+
+# ── Output toggles ────────────────────────────────────────────────────────────
+SAVE_PLOTLY_HTML      = False   # single-panel interactive Plotly HTML
+SAVE_COMPARISON_HTML  = False   # three-panel interactive Plotly HTML comparison
+
+OUTPUT_HTML            = "vortex_geometry.html"
+OUTPUT_REPORT          = "vortex_geometry_report.pdf"
+OUTPUT_COMPARISON      = "vortex_geometry_comparison.pdf"
+OUTPUT_COMPARISON_HTML = "vortex_geometry_comparison.html"
 
 # ── Seaborn colorblind palette (first 3 entries for 3 blades) ────────────────
-# Blue, Orange, Green — all clearly distinguishable
 CB_PALETTE = sns.color_palette("colorblind")
 BLADE_COLORS_MPL = [CB_PALETTE[0], CB_PALETTE[1], CB_PALETTE[2]]
-# Convert to 0-255 integers for Plotly rgba strings
 def _to255(c):
     return tuple(int(round(v * 255)) for v in c)
 BLADE_COLORS_PLY = [_to255(c) for c in BLADE_COLORS_MPL]
@@ -137,10 +145,335 @@ def build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w):
     return controlpoints, rings
 
 # =============================================================================
-# INTERACTIVE PLOTLY FIGURE  (original + colorblind colours)
+# SHARED MATPLOTLIB STYLE
+# =============================================================================
+
+def _apply_rcparams():
+    mpl.rcParams.update({
+        "text.usetex"       : False,
+        "font.family"       : "serif",
+        "font.serif"        : ["CMU Serif", "Computer Modern Roman",
+                               "Latin Modern Roman", "DejaVu Serif"],
+        "mathtext.fontset"  : "cm",
+        "axes.labelsize"    : 11,
+        "legend.fontsize"   : 9,
+        "xtick.labelsize"   : 9,
+        "ytick.labelsize"   : 9,
+        "axes.titlesize"    : 11,
+        "savefig.bbox"      : "tight",
+        "savefig.pad_inches": 0.02,
+        "legend.frameon"    : True,
+    })
+
+# =============================================================================
+# HELPER: draw vortex wake into a matplotlib Axes3D
+# =============================================================================
+
+def _draw_wake_on_ax(ax, rings, cps, N_per_blade, elev=22, azim=118):
+    """
+    Populate a single Axes3D with the bound + trailing vortex filaments,
+    blade outlines, rotor disc and axis.  No legend is added here.
+    """
+    n_ws = (len(rings[0]) - 1) // 2
+
+    pane_col = (0.93, 0.93, 0.93, 0.50)
+    ax.set_facecolor('white')
+    ax.xaxis.set_pane_color(pane_col)
+    ax.yaxis.set_pane_color(pane_col)
+    ax.zaxis.set_pane_color(pane_col)
+    ax.xaxis._axinfo['grid']['color'] = (0.80, 0.80, 0.80, 0.50)
+    ax.yaxis._axinfo['grid']['color'] = (0.80, 0.80, 0.80, 0.50)
+    ax.zaxis._axinfo['grid']['color'] = (0.80, 0.80, 0.80, 0.50)
+
+    for b in range(NBlades):
+        col   = BLADE_COLORS_MPL[b]
+        angle = 2.0 * np.pi / NBlades * b
+        cosR, sinR = np.cos(angle), np.sin(angle)
+
+        # blade outline
+        _, r_arr, _ = make_panels(N=80)
+        le_pts, te_pts = [], []
+        for r in r_arr:
+            r_R   = r / Radius
+            chord = blade_chord(r_R)
+            twist = np.radians(blade_twist(r_R))
+            ry = r * cosR;  rz = r * sinR
+            le_pts.append([(chord/2)*np.sin(twist), ry, rz-(chord/2)*np.cos(twist)])
+            te_pts.append([-(chord/2)*np.sin(twist), ry, rz+(chord/2)*np.cos(twist)])
+        le_pts = np.array(le_pts);  te_pts = np.array(te_pts)
+
+        ax.plot(le_pts[:,0], le_pts[:,1], le_pts[:,2], color=col, lw=1.8, alpha=1.0, zorder=8)
+        ax.plot(te_pts[:,0], te_pts[:,1], te_pts[:,2], color=col, lw=1.0, alpha=0.60, zorder=8)
+        ax.plot([le_pts[-1,0],te_pts[-1,0]], [le_pts[-1,1],te_pts[-1,1]],
+                [le_pts[-1,2],te_pts[-1,2]], color=col, lw=0.8, alpha=0.60)
+        ax.plot([le_pts[0,0], te_pts[0,0]], [le_pts[0,1], te_pts[0,1]],
+                [le_pts[0,2], te_pts[0,2]], color=col, lw=0.8, alpha=0.60)
+        step = max(1, len(r_arr) // 8)
+        for idx in range(0, len(r_arr), step):
+            ax.plot([le_pts[idx,0],te_pts[idx,0]],
+                    [le_pts[idx,1],te_pts[idx,1]],
+                    [le_pts[idx,2],te_pts[idx,2]],
+                    color=col, lw=0.4, alpha=0.18)
+
+        # bound vortex
+        bv_xs, bv_ys, bv_zs = [], [], []
+        for p in range(N_per_blade):
+            f = rings[b*N_per_blade+p][0]
+            bv_xs += [f['x1'],f['x2']];  bv_ys += [f['y1'],f['y2']];  bv_zs += [f['z1'],f['z2']]
+        ax.plot(bv_xs, bv_ys, bv_zs, color=col, lw=3.0, solid_capstyle='round', zorder=10)
+
+        # inner trailing vortex
+        for p in range(N_per_blade):
+            for f in rings[b*N_per_blade+p][1 : n_ws+1]:
+                ax.plot([f['x1'],f['x2']], [f['y1'],f['y2']], [f['z1'],f['z2']],
+                        color=col, lw=0.8, alpha=0.65, zorder=4)
+
+        # outer trailing vortex
+        light_col = tuple(min(1.0, c*0.60+0.40) for c in col[:3])
+        for p in range(N_per_blade):
+            for f in rings[b*N_per_blade+p][n_ws+1 : 2*n_ws+1]:
+                ax.plot([f['x1'],f['x2']], [f['y1'],f['y2']], [f['z1'],f['z2']],
+                        color=light_col, lw=0.55, alpha=0.50,
+                        linestyle='--', dashes=(5, 4), zorder=3)
+
+    # rotor disc
+    theta    = np.linspace(0, 2*np.pi, 360)
+    r_root_m = RootLocation_R * Radius
+    ax.plot(np.zeros(360), Radius*np.cos(theta), Radius*np.sin(theta),
+            color='#999999', lw=1.0, alpha=0.55)
+    ax.plot(np.zeros(360), r_root_m*np.cos(theta), r_root_m*np.sin(theta),
+            color='#999999', lw=0.6, alpha=0.40)
+    for ang in np.linspace(0, 2*np.pi, 7)[:-1]:
+        ax.plot([0, 0],
+                [r_root_m*np.cos(ang), Radius*np.cos(ang)],
+                [r_root_m*np.sin(ang), Radius*np.sin(ang)],
+                color='#cccccc', lw=0.4, alpha=0.35)
+
+    # rotor axis
+    x_max = max(f['x2'] for ring in rings for f in ring)
+    ax.plot([-8, x_max*1.02], [0, 0], [0, 0],
+            color='#888888', lw=0.8, linestyle=':', alpha=0.65)
+
+    ax.view_init(elev=elev, azim=azim)
+    ax.set_xlabel('x — axial [m]', labelpad=8, fontsize=9)
+    ax.set_ylabel('y [m]',          labelpad=8, fontsize=9)
+    ax.set_zlabel('z [m]',          labelpad=6, fontsize=9)
+
+# =============================================================================
+# COMPARISON FIGURE  (3 side-by-side subplots, shared legend)
+# =============================================================================
+
+def plot_comparison_figure():
+    """
+    Three 3-D subplots side by side, one per Δψ in COMPARE_DPSI.
+    A shared legend panel sits to the right.
+    Saved as OUTPUT_COMPARISON (.pdf).
+    Optionally also saved as OUTPUT_COMPARISON_HTML.
+    """
+    _apply_rcparams()
+
+    Omega = U0 * TSR / Radius
+
+    # ── figure layout ─────────────────────────────────────────────────────────
+    # Each 3-D subplot occupies a fraction of the width; legend gets the rest.
+    n_panels = len(COMPARE_DPSI)
+    panel_w  = 0.82 / n_panels          # fraction of total width per 3-D panel
+    leg_x0   = 0.83                     # legend panel left edge
+
+    fig = plt.figure(figsize=(5.5 * n_panels + 2.5, 6.5))
+    fig.patch.set_facecolor('white')
+
+    axes_3d = []
+    for idx, dpsi in enumerate(COMPARE_DPSI):
+        left = 0.01 + idx * panel_w
+        ax   = fig.add_axes([left, 0.04, panel_w - 0.01, 0.88], projection='3d')
+        axes_3d.append(ax)
+
+        cps, rings  = build_vortex_system(Omega, N, N_wake, dpsi, a_w)
+        N_per_blade = len(cps) // NBlades
+
+        _draw_wake_on_ax(ax, rings, cps, N_per_blade, elev=22, azim=118)
+
+        # subplot label
+        n_steps = int(round(360.0 / dpsi))
+        ax.set_title(
+            f'$\\Delta\\psi = {dpsi:.0f}^\\circ$  '
+            f'({n_steps} steps/rev)',
+            fontsize=15, fontweight='semibold', pad=0
+        )
+
+    # ── shared legend ─────────────────────────────────────────────────────────
+    ax_leg = fig.add_axes([leg_x0, 0.12, 1.0 - leg_x0 - 0.01, 0.76])
+    ax_leg.axis('off')
+
+    handles = []
+    for b in range(NBlades):
+        handles.append(Line2D([0],[0], color=BLADE_COLORS_MPL[b],
+                               lw=2.2, label=f'Blade {b+1}'))
+    handles += [
+        Line2D([0],[0], color='white',   lw=0,   label=' '),
+        Line2D([0],[0], color='#333333', lw=0,   label='Line types:'),
+        Line2D([0],[0], color='#444444', lw=3.2, label='Bound vortex'),
+        Line2D([0],[0], color='#555555', lw=0.9, alpha=0.8,
+               label='Inner trailing'),
+        Line2D([0],[0], color='#aaaaaa', lw=0.8, linestyle='--',
+               dashes=(5, 4), label='Outer trailing'),
+        Line2D([0],[0], color='#999999', lw=1.0, label='Rotor disc / axis'),
+    ]
+
+    leg = ax_leg.legend(
+        handles=handles, loc='center',
+        framealpha=0.97, edgecolor='#cccccc',
+        handlelength=2.6, labelspacing=0.55,
+        title='Vortex wake geometry',
+        title_fontsize=10,
+    )
+    leg.get_frame().set_linewidth(0.7)
+    leg.get_title().set_fontweight('semibold')
+
+    # ── save PDF ──────────────────────────────────────────────────────────────
+    out_pdf = os.path.join(os.path.dirname(os.path.abspath(__file__)), OUTPUT_COMPARISON)
+    fig.savefig(out_pdf, dpi=300, facecolor='white', edgecolor='none')
+    print(f"Saved  →  {out_pdf}")
+    plt.close(fig)
+
+    # ── optional Plotly HTML ───────────────────────────────────────────────────
+    if SAVE_COMPARISON_HTML:
+        _save_comparison_html()
+
+    return out_pdf
+
+
+def _save_comparison_html():
+    """
+    Three-panel interactive Plotly figure for the comparison.
+    Only called when SAVE_COMPARISON_HTML = True.
+    """
+    Omega = U0 * TSR / Radius
+
+    fig = make_subplots(
+        rows=1, cols=len(COMPARE_DPSI),
+        specs=[[{'type': 'scatter3d'}] * len(COMPARE_DPSI)],
+        subplot_titles=[
+            f'Δψ = {d:.0f}° ({int(round(360/d))} steps/rev)'
+            for d in COMPARE_DPSI
+        ],
+    )
+
+    def rgba(rgb, a):
+        return f'rgba({rgb[0]},{rgb[1]},{rgb[2]},{a})'
+
+    def lighten(rgb, f):
+        return tuple(int(c + (255 - c) * f) for c in rgb)
+
+    for col_idx, dpsi in enumerate(COMPARE_DPSI):
+        cps, rings  = build_vortex_system(Omega, N, N_wake, dpsi, a_w)
+        N_per_blade = len(cps) // NBlades
+        n_ws        = (len(rings[0]) - 1) // 2
+        show_leg    = (col_idx == 0)   # legend only on first subplot
+
+        for b in range(NBlades):
+            rgb   = BLADE_COLORS_PLY[b]
+            bname = f'Blade {b + 1}'
+
+            bound_s, inner_s, outer_s = [], [], []
+            for p in range(N_per_blade):
+                ring = rings[b * N_per_blade + p]
+                bound_s.append(ring[0])
+                inner_s.extend(ring[1        : n_ws + 1])
+                outer_s.extend(ring[n_ws + 1 : 2*n_ws + 1])
+
+            def seg_xyz(segs):
+                xs, ys, zs = [], [], []
+                for f in segs:
+                    xs += [f['x1'], f['x2'], None]
+                    ys += [f['y1'], f['y2'], None]
+                    zs += [f['z1'], f['z2'], None]
+                return xs, ys, zs
+
+            bx, by, bz = seg_xyz(bound_s)
+            fig.add_trace(go.Scatter3d(x=bx, y=by, z=bz, mode='lines',
+                line=dict(color=rgba(rgb, 1.0), width=4),
+                name=f'{bname} bound', legendgroup=f'bv{b}',
+                showlegend=show_leg, hoverinfo='skip'),
+                row=1, col=col_idx+1)
+
+            ix, iy, iz = seg_xyz(inner_s)
+            fig.add_trace(go.Scatter3d(x=ix, y=iy, z=iz, mode='lines',
+                line=dict(color=rgba(rgb, 0.55), width=1.2),
+                name=f'{bname} inner', legendgroup=f'it{b}',
+                showlegend=show_leg, hoverinfo='skip'),
+                row=1, col=col_idx+1)
+
+            ox, oy, oz = seg_xyz(outer_s)
+            fig.add_trace(go.Scatter3d(x=ox, y=oy, z=oz, mode='lines',
+                line=dict(color=rgba(lighten(rgb, 0.40), 0.35), width=0.8,
+                          dash='dot'),
+                name=f'{bname} outer', legendgroup=f'ot{b}',
+                showlegend=show_leg, hoverinfo='skip'),
+                row=1, col=col_idx+1)
+
+        # disc
+        theta = np.linspace(0, 2*np.pi, 180)
+        fig.add_trace(go.Scatter3d(
+            x=np.zeros(180), y=Radius*np.cos(theta), z=Radius*np.sin(theta),
+            mode='lines', line=dict(color='rgba(150,150,150,0.25)', width=1),
+            name='Rotor disc', legendgroup='disc',
+            showlegend=show_leg, hoverinfo='skip'),
+            row=1, col=col_idx+1)
+
+        # axis
+        x_max = max(f['x2'] for ring in rings for f in ring)
+        fig.add_trace(go.Scatter3d(
+            x=[-8, x_max*1.02], y=[0, 0], z=[0, 0], mode='lines',
+            line=dict(color='rgba(150,150,150,0.3)', width=1, dash='dot'),
+            name='Rotor axis', legendgroup='axis',
+            showlegend=show_leg, hoverinfo='skip'),
+            row=1, col=col_idx+1)
+
+        scene_key = 'scene' if col_idx == 0 else f'scene{col_idx+1}'
+        fig.layout[scene_key].update(
+            xaxis=dict(title='x — axial [m]', color='#888',
+                       gridcolor='rgba(255,255,255,0.07)', showbackground=True,
+                       backgroundcolor='rgba(0,0,0,0)'),
+            yaxis=dict(title='y [m]', color='#888',
+                       gridcolor='rgba(255,255,255,0.07)', showbackground=True,
+                       backgroundcolor='rgba(0,0,0,0)'),
+            zaxis=dict(title='z [m]', color='#888',
+                       gridcolor='rgba(255,255,255,0.07)', showbackground=True,
+                       backgroundcolor='rgba(0,0,0,0)'),
+            bgcolor='#0f0f0f',
+            aspectmode='data',
+            camera=dict(eye=dict(x=1.3, y=0.75, z=0.55)),
+        )
+
+    fig.update_layout(
+        title=dict(
+            text=(f'Frozen vortex wake  ·  {NBlades} blades  ·  '
+                  f'N = {N} panels/blade  ·  {N_wake} wake rotations  ·  TSR = {TSR}'),
+            font=dict(size=12, color='#cccccc'), x=0.5, xanchor='center',
+        ),
+        paper_bgcolor='#0f0f0f',
+        font=dict(color='#cccccc', size=10, family='Arial'),
+        legend=dict(bgcolor='rgba(20,20,20,0.88)', bordercolor='rgba(255,255,255,0.12)',
+                    borderwidth=1, font=dict(size=9)),
+        height=700,
+    )
+
+    out_html = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            OUTPUT_COMPARISON_HTML)
+    fig.write_html(out_html)
+    print(f"Saved  →  {out_html}")
+
+
+# =============================================================================
+# ORIGINAL SINGLE-PANEL FUNCTIONS  (unchanged)
 # =============================================================================
 
 def plot_vortex_geometry():
+    """Interactive single-panel Plotly figure."""
+    if not SAVE_PLOTLY_HTML:
+        return
 
     Omega       = U0 * TSR / Radius
     cps, rings  = build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w)
@@ -296,140 +629,34 @@ def plot_vortex_geometry():
 
     out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), OUTPUT_HTML)
     fig.write_html(out_path)
-    print(f"Saved  \u2192  {out_path}")
+    print(f"Saved  →  {out_path}")
     fig.show()
     return fig
 
 
-# =============================================================================
-# STATIC REPORT FIGURE  (matplotlib, white background, colorblind palette)
-# =============================================================================
-
 def plot_report_figure():
     """
-    Publication-quality 3-D view using matplotlib's Axes3D.
+    Publication-quality single-panel 3-D view using matplotlib.
     White background, seaborn colorblind palette, legend panel beside the plot.
-    Front-of-rotor view: rotor disc visible on the right, wake trailing to the left.
-    Saved as high-res PDF.
     """
-    mpl.rcParams.update({
-        "text.usetex"       : False,
-        "font.family"       : "serif",
-        "font.serif"        : ["CMU Serif", "Computer Modern Roman",
-                               "Latin Modern Roman", "DejaVu Serif"],
-        "mathtext.fontset"  : "cm",
-        "axes.labelsize"    : 12,
-        "legend.fontsize"   : 10,
-        "xtick.labelsize"   : 10,
-        "ytick.labelsize"   : 10,
-        "axes.titlesize"    : 12,
-        "savefig.bbox"      : "tight",
-        "savefig.pad_inches": 0.02,
-        "legend.frameon"    : True,
-    })
+    _apply_rcparams()
 
     Omega       = U0 * TSR / Radius
     cps, rings  = build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w)
     N_per_blade = len(cps) // NBlades
-    n_ws        = (len(rings[0]) - 1) // 2
 
     fig = plt.figure(figsize=(12, 7))
     ax        = fig.add_axes([0.0, 0.0, 0.77, 1.0], projection='3d')
     ax_legend = fig.add_axes([0.76, 0.12, 0.24, 0.76])
     ax_legend.axis('off')
     fig.patch.set_facecolor('white')
-    ax.set_facecolor('white')
 
-    pane_col = (0.93, 0.93, 0.93, 0.50)
-    ax.xaxis.set_pane_color(pane_col)
-    ax.yaxis.set_pane_color(pane_col)
-    ax.zaxis.set_pane_color(pane_col)
-    ax.xaxis._axinfo['grid']['color'] = (0.80, 0.80, 0.80, 0.50)
-    ax.yaxis._axinfo['grid']['color'] = (0.80, 0.80, 0.80, 0.50)
-    ax.zaxis._axinfo['grid']['color'] = (0.80, 0.80, 0.80, 0.50)
+    _draw_wake_on_ax(ax, rings, cps, N_per_blade, elev=22, azim=118)
 
     legend_handles = []
-
     for b in range(NBlades):
-        col   = BLADE_COLORS_MPL[b]
-        angle = 2.0 * np.pi / NBlades * b
-        cosR, sinR = np.cos(angle), np.sin(angle)
-
-        # ── blade outline (LE + TE + caps + chord ticks) ──────────────────
-        _, r_arr, _ = make_panels(N=80)
-        le_pts, te_pts = [], []
-        for r in r_arr:
-            r_R   = r / Radius
-            chord = blade_chord(r_R)
-            twist = np.radians(blade_twist(r_R))
-            ry = r * cosR;  rz = r * sinR
-            le_pts.append([(chord/2)*np.sin(twist), ry, rz-(chord/2)*np.cos(twist)])
-            te_pts.append([-(chord/2)*np.sin(twist), ry, rz+(chord/2)*np.cos(twist)])
-        le_pts = np.array(le_pts);  te_pts = np.array(te_pts)
-
-        ax.plot(le_pts[:,0], le_pts[:,1], le_pts[:,2], color=col, lw=2.2, alpha=1.0,  zorder=8)
-        ax.plot(te_pts[:,0], te_pts[:,1], te_pts[:,2], color=col, lw=1.2, alpha=0.60, zorder=8)
-        ax.plot([le_pts[-1,0],te_pts[-1,0]], [le_pts[-1,1],te_pts[-1,1]],
-                [le_pts[-1,2],te_pts[-1,2]], color=col, lw=1.0, alpha=0.60)
-        ax.plot([le_pts[0,0], te_pts[0,0]], [le_pts[0,1], te_pts[0,1]],
-                [le_pts[0,2], te_pts[0,2]], color=col, lw=1.0, alpha=0.60)
-        step = max(1, len(r_arr) // 8)
-        for idx in range(0, len(r_arr), step):
-            ax.plot([le_pts[idx,0],te_pts[idx,0]],
-                    [le_pts[idx,1],te_pts[idx,1]],
-                    [le_pts[idx,2],te_pts[idx,2]],
-                    color=col, lw=0.5, alpha=0.18)
-
-        # ── bound vortex (thick solid) ────────────────────────────────────
-        bv_xs, bv_ys, bv_zs = [], [], []
-        for p in range(N_per_blade):
-            f = rings[b*N_per_blade+p][0]
-            bv_xs += [f['x1'],f['x2']];  bv_ys += [f['y1'],f['y2']];  bv_zs += [f['z1'],f['z2']]
-        ax.plot(bv_xs, bv_ys, bv_zs, color=col, lw=4.0, solid_capstyle='round', zorder=10)
-
-        # ── inner trailing vortex (medium solid) ──────────────────────────
-        for p in range(N_per_blade):
-            for f in rings[b*N_per_blade+p][1 : n_ws+1]:
-                ax.plot([f['x1'],f['x2']], [f['y1'],f['y2']], [f['z1'],f['z2']],
-                        color=col, lw=0.9, alpha=0.65, zorder=4)
-
-        # ── outer trailing vortex (light dashed) ──────────────────────────
-        light_col = tuple(min(1.0, c*0.60+0.40) for c in col[:3])
-        for p in range(N_per_blade):
-            for f in rings[b*N_per_blade+p][n_ws+1 : 2*n_ws+1]:
-                ax.plot([f['x1'],f['x2']], [f['y1'],f['y2']], [f['z1'],f['z2']],
-                        color=light_col, lw=0.65, alpha=0.50,
-                        linestyle='--', dashes=(5, 4), zorder=3)
-
-        legend_handles.append(Line2D([0],[0], color=col, lw=2.5, label=f'Blade {b+1}'))
-
-    # ── rotor disc reference ───────────────────────────────────────────────
-    theta    = np.linspace(0, 2*np.pi, 360)
-    r_root_m = RootLocation_R * Radius
-    ax.plot(np.zeros(360), Radius*np.cos(theta), Radius*np.sin(theta),
-            color='#999999', lw=1.2, alpha=0.55)
-    ax.plot(np.zeros(360), r_root_m*np.cos(theta), r_root_m*np.sin(theta),
-            color='#999999', lw=0.7, alpha=0.40)
-    for ang in np.linspace(0, 2*np.pi, 7)[:-1]:
-        ax.plot([0, 0],
-                [r_root_m*np.cos(ang), Radius*np.cos(ang)],
-                [r_root_m*np.sin(ang), Radius*np.sin(ang)],
-                color='#cccccc', lw=0.4, alpha=0.35)
-
-    # ── rotor axis ────────────────────────────────────────────────────────
-    x_max = max(f['x2'] for ring in rings for f in ring)
-    ax.plot([-8, x_max*1.02], [0, 0], [0, 0],
-            color='#888888', lw=0.9, linestyle=':', alpha=0.65)
-
-    # ── view: front of rotor facing viewer, wake trailing to the left ─────
-    ax.view_init(elev=22, azim=118)
-
-    # ── axis labels (fontsize from rcParams) ──────────────────────────────
-    ax.set_xlabel('x \u2014 axial [m]', labelpad=10)
-    ax.set_ylabel('y [m]',              labelpad=10)
-    ax.set_zlabel('z [m]',              labelpad=8)
-
-    # ── legend panel ──────────────────────────────────────────────────────
+        legend_handles.append(Line2D([0],[0], color=BLADE_COLORS_MPL[b],
+                                     lw=2.5, label=f'Blade {b+1}'))
     legend_handles += [
         Line2D([0],[0], color='white',   lw=0,   label=' '),
         Line2D([0],[0], color='#333333', lw=0,   label='Line types:'),
@@ -449,14 +676,16 @@ def plot_report_figure():
 
     out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), OUTPUT_REPORT)
     fig.savefig(out_path, dpi=300, facecolor='white', edgecolor='none')
-    print(f"Saved  \u2192  {out_path}")
+    print(f"Saved  →  {out_path}")
     plt.close(fig)
     return out_path
 
 
 # =============================================================================
 if __name__ == "__main__":
-    # 1) static report figure (always runs, no display needed)
+    # 1) single-panel report figure
     plot_report_figure()
-    # 2) interactive Plotly figure
+    # 2) three-panel Δψ comparison figure (always produced)
+    plot_comparison_figure()
+    # 3) single-panel interactive Plotly (only if toggled on)
     plot_vortex_geometry()

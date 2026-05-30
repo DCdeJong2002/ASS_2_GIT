@@ -10,7 +10,7 @@ results to ll_results.npz for use with PLOTTING_LL_FINAL.py.
 Run:  python LiftingLine_FINAL.py
 """
 
-import os, sys
+import os, sys, time
 import numpy as np
 import pandas as pd
 import matplotlib as mpl
@@ -56,7 +56,7 @@ TSR_SWEEP_PERF = list(np.arange(4.0, 12.5, 0.5))   # [4.0, 4.5, …, 12.0]
 
 # ── Sensitivity sweep parameters (all run at TSR=8) ──────────────────────────
 SENS_TSR          = 8
-SENS_N_LIST       = [5, 8, 10, 13, 15, 18, 20, 25, 30, 50, 75, 100, 125, 150]
+SENS_N_LIST       = [5, 8, 10, 13, 15, 18, 20, 25, 30, 35, 40, 50, 60, 70, 80, 90, 100, 125, 150]
 SENS_AW_LIST      = [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5]
 SENS_DPSI_LIST    = [1.0, 2.5, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 40.0, 50.0,
                      60.0, 70.0, 80.0, 90.0]
@@ -309,7 +309,7 @@ def assemble_influence_matrix(controlpoints, rings):
 # =============================================================================
 
 def solve_circulation(A_u, A_v, A_w, controlpoints, Omega,
-                      tol=1e-4, max_iter=500):
+                      tol=1e-4, max_iter=1000):
     N_total = len(controlpoints)
     Gamma   = np.zeros(N_total)
     R_prev  = np.zeros(N_total)
@@ -772,6 +772,10 @@ sens_disc_data  = {}
 sens_dpsi_data  = {}
 sens_wake_data  = {}
 
+# Timing dicts: wall-clock seconds per case (populated during sensitivity runs)
+timing_disc  = {}   # (N, dist) -> float seconds
+timing_dpsi  = {}   # dpsi      -> float seconds
+
 print(f"\nWake convection mode: {'ITERATED a_w' if USE_ITERATED_AW else f'FIXED a_w = {A_WAKE}'}")
 
 # ── Spanwise TSR sweep ────────────────────────────────────────────────────────
@@ -825,8 +829,10 @@ if RUN_SENS_DISC:
     for N in SENS_N_LIST:
         for dist in ["cosine", "constant"]:
             print(f"\n  N={N}, distribution={dist}:")
+            _t0 = time.perf_counter()
             res, CT, CP = run_case(SENS_TSR, N=N, distribution=dist,
                                    _meta_key=f"disc_{N}_{dist}")
+            timing_disc[(N, dist)] = time.perf_counter() - _t0
             sens_disc_data[(N, dist)] = (res, CT, CP)
 
 # ── Sensitivity: azimuthal step ───────────────────────────────────────────────
@@ -835,7 +841,9 @@ if RUN_SENS_AZIMUTHAL:
     print(f"Running sensitivity: azimuthal step (TSR={SENS_TSR}) ...")
     for dpsi in SENS_DPSI_LIST:
         print(f"\n  dpsi = {dpsi} deg:")
+        _t0 = time.perf_counter()
         res, CT, CP = run_case(SENS_TSR, dpsi_deg=dpsi, _meta_key=f"dpsi_{dpsi}")
+        timing_dpsi[dpsi] = time.perf_counter() - _t0
         sens_dpsi_data[dpsi] = (res, CT, CP)
 
 # ── Sensitivity: wake length ──────────────────────────────────────────────────
@@ -1067,7 +1075,15 @@ elif PLOT_SENS_AW:
 if PLOT_SENS_DISC and sens_disc_data:
     n_N = len(SENS_N_LIST)
 
-    # ── Panel count: Cn spanwise ──────────────────────────────────────────
+    # Shared style for the two distributions throughout this section
+    _DIST_STYLE = {
+        "cosine":   {"color": "#0173b2", "ls": "-",  "marker": "o",
+                     "label_prefix": "Cosine"},
+        "constant": {"color": "#d55e00", "ls": "--", "marker": "s",
+                     "label_prefix": "Constant"},
+    }
+
+    # ── Panel count: Cn spanwise — cosine only (too many lines otherwise) ─
     fig, ax = plt.subplots(figsize=(8, 5))
     for idx, N in enumerate(SENS_N_LIST):
         if (N, "cosine") not in sens_disc_data: continue
@@ -1078,7 +1094,7 @@ if PLOT_SENS_DISC and sens_disc_data:
     ax.legend(fontsize=8); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_a1_Cn_panel_count_cosine")
 
-    # ── Panel count: a spanwise ───────────────────────────────────────────
+    # ── Panel count: a spanwise — cosine only ─────────────────────────────
     fig, ax = plt.subplots(figsize=(8, 5))
     for idx, N in enumerate(SENS_N_LIST):
         if (N, "cosine") not in sens_disc_data: continue
@@ -1089,43 +1105,304 @@ if PLOT_SENS_DISC and sens_disc_data:
     ax.legend(fontsize=8); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_a2_a_panel_count_cosine")
 
-    # ── Cosine vs constant: Cn spanwise ───────────────────────────────────
+    # ── Cosine vs constant: Cn spanwise (at baseline N) ───────────────────
     N_ref = N_PANELS
     fig, ax = plt.subplots(figsize=(8, 5))
-    for dist, col, ls in [("cosine", "#0173b2", "-"), ("constant", "#d55e00", "--")]:
+    for dist, st in _DIST_STYLE.items():
         if (N_ref, dist) not in sens_disc_data: continue
         res, CT, CP = sens_disc_data[(N_ref, dist)]
-        ax.plot(res[:, 2], res[:, 3] / norm_val, color=col, lw=2, ls=ls,
-                label=rf"{dist.capitalize()}  $C_T={CT:.3f}$")
+        ax.plot(res[:, 2], res[:, 3] / norm_val,
+                color=st["color"], lw=2, ls=st["ls"],
+                label=rf"{st['label_prefix']}  $C_T={CT:.3f}$")
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_n$ [-]")
     ax.legend(fontsize=8); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_b1_Cn_cosine_vs_constant")
 
-    # ── Cosine vs constant: a spanwise ────────────────────────────────────
+    # ── Cosine vs constant: a spanwise (at baseline N) ────────────────────
     fig, ax = plt.subplots(figsize=(8, 5))
-    for dist, col, ls in [("cosine", "#0173b2", "-"), ("constant", "#d55e00", "--")]:
+    for dist, st in _DIST_STYLE.items():
         if (N_ref, dist) not in sens_disc_data: continue
         res, CT, CP = sens_disc_data[(N_ref, dist)]
-        ax.plot(res[:, 2], res[:, 0], color=col, lw=2, ls=ls,
-                label=rf"{dist.capitalize()}  $C_P={CP:.3f}$")
+        ax.plot(res[:, 2], res[:, 0],
+                color=st["color"], lw=2, ls=st["ls"],
+                label=rf"{st['label_prefix']}  $C_P={CP:.3f}$")
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$a$ [-]")
     ax.legend(fontsize=8); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_b2_a_cosine_vs_constant")
 
-    # ── CT convergence vs N ───────────────────────────────────────────────
-    N_vals = [N for N in SENS_N_LIST if (N, "cosine") in sens_disc_data]
-    ct_N   = [sens_disc_data[(N, "cosine")][1] for N in N_vals]
-    cp_N   = [sens_disc_data[(N, "cosine")][2] for N in N_vals]
+    # ── Cn cosine vs constant at several N (colour=N, style=distribution) ──
+    # Colour encodes N; cosine solid/opaque, constant dashed/semi-transparent.
+    # Shaded band between the two distributions highlights where constant
+    # over-predicts the loading (typically the outboard / tip region).
+    _CMP_N = [N for N in (5, 20, 70) if (N, "cosine") in sens_disc_data
+              and (N, "constant") in sens_disc_data]
+
+    if _CMP_N:
+        # Assign a distinct CB colour to each N value
+        _n_colors = [_CB_PALETTE[i] for i in range(len(_CMP_N))]
+
+        for zoom, fname in [(False, "Sens_Disc_f1_Cn_cosine_vs_constant_multiN"),
+                            (True,  "Sens_Disc_f2_Cn_cosine_vs_constant_multiN_zoom")]:
+            fig, ax = plt.subplots(figsize=(9, 5.5))
+            for ci, N in enumerate(_CMP_N):
+                col = _n_colors[ci]
+                res_cos, CT_cos, _ = sens_disc_data[(N, "cosine")]
+                res_con, CT_con, _ = sens_disc_data[(N, "constant")]
+
+                rR_cos = res_cos[:, 2];  Cn_cos = res_cos[:, 3] / norm_val
+                rR_con = res_con[:, 2];  Cn_con = res_con[:, 3] / norm_val
+
+                # Shade the difference: interpolate constant onto cosine r/R grid
+                Cn_con_on_cos = np.interp(rR_cos, rR_con, Cn_con)
+                # Only shade where constant exceeds cosine (the over-prediction)
+                ax.fill_between(rR_cos, Cn_cos, Cn_con_on_cos,
+                                where=(Cn_con_on_cos > Cn_cos),
+                                color=col, alpha=0.12, zorder=1,
+                                interpolate=True)
+
+                # Cosine — solid, opaque, with control-point markers
+                ax.plot(rR_cos, Cn_cos, color=col, lw=2.0, ls="-",
+                        marker="o", ms=4, alpha=1.0, zorder=3,
+                        label=rf"$N={N}$ cosine  $C_T={CT_cos:.3f}$")
+                # Constant — dashed, semi-transparent, square markers
+                ax.plot(rR_con, Cn_con, color=col, lw=2.0, ls="--",
+                        marker="s", ms=4, alpha=0.55, zorder=2,
+                        label=rf"$N={N}$ constant  $C_T={CT_con:.3f}$")
+
+            ax.set_xlabel("r/R")
+            ax.set_ylabel(r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$ [-]")
+            ax.grid(True)
+            if zoom:
+                ax.set_xlim(0.7, 1.0)
+                # Auto y-limits to the tip region for the finest available N
+                res_fine, _, _ = sens_disc_data[(_CMP_N[-1], "cosine")]
+                mask = res_fine[:, 2] >= 0.7
+                y_tip = res_fine[mask, 3] / norm_val
+                if y_tip.size:
+                    ymin = 0.9 * float(np.min(y_tip))
+                    ymax = 1.1 * float(np.max(y_tip))
+                    ax.set_ylim(ymin, ymax)
+            ax.legend(fontsize=8, loc="upper left")
+            # Annotate the shaded meaning once
+            ax.text(0.02, 0.02,
+                    "Shaded band: constant $>$ cosine\n(over-predicted loading)",
+                    transform=ax.transAxes, fontsize=8, va="bottom", ha="left",
+                    bbox=dict(boxstyle="round,pad=0.3", fc="white",
+                              ec="#949494", alpha=0.85))
+            fig.tight_layout(); save_fig(fname)
+
+    # ── Prepare accuracy and timing arrays — BOTH distributions ───────────
+    N_vals_cos = [N for N in SENS_N_LIST if (N, "cosine")   in sens_disc_data]
+    N_vals_con = [N for N in SENS_N_LIST if (N, "constant") in sens_disc_data]
+    N_vals_all = sorted(set(N_vals_cos) & set(N_vals_con))
+
+    ct_cos = np.array([sens_disc_data[(N, "cosine")][1]   for N in N_vals_cos])
+    cp_cos = np.array([sens_disc_data[(N, "cosine")][2]   for N in N_vals_cos])
+    ct_con = np.array([sens_disc_data[(N, "constant")][1] for N in N_vals_con])
+    cp_con = np.array([sens_disc_data[(N, "constant")][2] for N in N_vals_con])
+
+    # Convergence flags from solver meta (index 1 = converged bool)
+    def _is_conv(N, dist):
+        entry = _solver_meta.get(f"disc_{N}_{dist}")
+        return bool(entry[1]) if entry is not None else True
+
+    conv_cos = np.array([_is_conv(N, "cosine")   for N in N_vals_cos])
+    conv_con = np.array([_is_conv(N, "constant") for N in N_vals_con])
+
+    # Reference = FINEST CONVERGED cosine case (not finest overall)
+    _conv_cos_N = [N for N, c in zip(N_vals_cos, conv_cos) if c]
+    if _conv_cos_N:
+        N_ref_conv = _conv_cos_N[-1]
+        ct_ref = sens_disc_data[(N_ref_conv, "cosine")][1]
+        cp_ref = sens_disc_data[(N_ref_conv, "cosine")][2]
+    else:
+        # Fallback: finest cosine overall if nothing converged
+        N_ref_conv = N_vals_cos[-1]
+        ct_ref = ct_cos[-1];  cp_ref = cp_cos[-1]
+    print(f"  Disc error reference = finest CONVERGED cosine case: "
+          f"N={N_ref_conv}  CT={ct_ref:.4f}  CP={cp_ref:.4f}")
+
+    def _pct_err(arr, ref):
+        e = np.abs(arr - ref) / ref * 100.0
+        return np.where(e == 0, np.nan, e)
+
+    err_CT_cos = _pct_err(ct_cos, ct_ref)
+    err_CP_cos = _pct_err(cp_cos, cp_ref)
+    err_CT_con = _pct_err(ct_con, ct_ref)
+    err_CP_con = _pct_err(cp_con, cp_ref)
+
+    # Timing — normalise by the slowest case across BOTH distributions
+    t_cos = np.array([timing_disc.get((N, "cosine"),   0.0) for N in N_vals_cos])
+    t_con = np.array([timing_disc.get((N, "constant"), 0.0) for N in N_vals_con])
+    t_max = max(t_cos.max(), t_con.max()) if max(t_cos.max(), t_con.max()) > 0 else 1.0
+    t_hat_cos = t_cos / t_max
+    t_hat_con = t_con / t_max
+    has_timing = t_max > 0
+
+    # Helper: plot a line with converged points filled and non-converged hollow
+    def _plot_conv_split(ax, x, y, conv, color, ls, marker, label,
+                         logy=False, alpha=1.0):
+        x = np.asarray(x, dtype=float); y = np.asarray(y, dtype=float)
+        conv = np.asarray(conv, dtype=bool)
+        plot_fn = ax.semilogy if logy else ax.plot
+        # Connecting line through all points (light)
+        plot_fn(x, y, ls=ls, color=color, lw=2, alpha=alpha, label=label, zorder=2)
+        # Converged points: filled markers
+        if conv.any():
+            plot_fn(x[conv], y[conv], ls="none", marker=marker,
+                    mfc=color, mec=color, ms=7, zorder=3)
+        # Non-converged points: hollow markers with X overlay
+        if (~conv).any():
+            plot_fn(x[~conv], y[~conv], ls="none", marker=marker,
+                    mfc="white", mec=color, mew=1.5, ms=7, zorder=3)
+            plot_fn(x[~conv], y[~conv], ls="none", marker="x",
+                    color=color, ms=6, mew=1.5, zorder=4)
+
+    # ── CT vs N — cosine AND constant (non-converged flagged) ─────────────
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(N_vals, ct_N, "o-", color="#0173b2", lw=2)
-    ax.set_xlabel("N panels"); ax.set_ylabel(r"$C_T$ [-]"); ax.grid(True)
+    _plot_conv_split(ax, N_vals_cos, ct_cos, conv_cos,
+                     _DIST_STYLE["cosine"]["color"],   "-",  "o", "Cosine")
+    _plot_conv_split(ax, N_vals_con, ct_con, conv_con,
+                     _DIST_STYLE["constant"]["color"], "--", "s", "Constant")
+    ax.axvline(N_PANELS, color="#949494", ls=":", lw=1.2,
+               label=rf"Baseline $N={N_PANELS}$")
+    ax.plot([], [], ls="none", marker="x", color="#444",
+            label="Not converged")
+    ax.set_xlabel(r"$N_\mathrm{panels}$ [-]")
+    ax.set_ylabel(r"$C_T$ [-]"); ax.legend(fontsize=9); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_c1_CT_convergence_vs_N")
 
-    # ── CP convergence vs N ───────────────────────────────────────────────
+    # ── CP vs N — cosine AND constant (non-converged flagged) ─────────────
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(N_vals, cp_N, "o-", color="#029e73", lw=2)
-    ax.set_xlabel("N panels"); ax.set_ylabel(r"$C_P$ [-]"); ax.grid(True)
+    _plot_conv_split(ax, N_vals_cos, cp_cos, conv_cos,
+                     _DIST_STYLE["cosine"]["color"],   "-",  "o", "Cosine")
+    _plot_conv_split(ax, N_vals_con, cp_con, conv_con,
+                     _DIST_STYLE["constant"]["color"], "--", "s", "Constant")
+    ax.axvline(N_PANELS, color="#949494", ls=":", lw=1.2,
+               label=rf"Baseline $N={N_PANELS}$")
+    ax.plot([], [], ls="none", marker="x", color="#444",
+            label="Not converged")
+    ax.set_xlabel(r"$N_\mathrm{panels}$ [-]")
+    ax.set_ylabel(r"$C_P$ [-]"); ax.legend(fontsize=9); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_c2_CP_convergence_vs_N")
+
+    # ── Relative error vs N — cosine AND constant (log, non-conv flagged) ─
+    fig, ax = plt.subplots(figsize=(8, 5))
+    _plot_conv_split(ax, N_vals_cos, err_CT_cos, conv_cos,
+                     _DIST_STYLE["cosine"]["color"],   "-",  "o",
+                     r"$\epsilon_{C_T}$ cosine", logy=True)
+    _plot_conv_split(ax, N_vals_cos, err_CP_cos, conv_cos,
+                     _DIST_STYLE["cosine"]["color"],   "--", "o",
+                     r"$\epsilon_{C_P}$ cosine", logy=True, alpha=0.6)
+    _plot_conv_split(ax, N_vals_con, err_CT_con, conv_con,
+                     _DIST_STYLE["constant"]["color"], "-",  "s",
+                     r"$\epsilon_{C_T}$ constant", logy=True)
+    _plot_conv_split(ax, N_vals_con, err_CP_con, conv_con,
+                     _DIST_STYLE["constant"]["color"], "--", "s",
+                     r"$\epsilon_{C_P}$ constant", logy=True, alpha=0.6)
+    ax.axvline(N_PANELS, color="#949494", ls=":", lw=1.2,
+               label=rf"Baseline $N={N_PANELS}$")
+    ax.axvline(N_ref_conv, color="#444", ls="-.", lw=1.2,
+               label=rf"Reference (finest converged) $N={N_ref_conv}$")
+    ax.plot([], [], ls="none", marker="x", color="#444",
+            label="Not converged")
+    ax.set_xlabel(r"$N_\mathrm{panels}$ [-]")
+    ax.set_ylabel(r"Relative error w.r.t. finest converged cosine [%]")
+    ax.legend(fontsize=7); ax.grid(True, which="both")
+    fig.tight_layout(); save_fig("Sens_Disc_d1_error_vs_N")
+
+    # ── Normalised compute time vs N — cosine AND constant ────────────────
+    if has_timing:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        _plot_conv_split(ax, N_vals_cos, t_hat_cos, conv_cos,
+                         _DIST_STYLE["cosine"]["color"],   "-",  "o", "Cosine")
+        _plot_conv_split(ax, N_vals_con, t_hat_con, conv_con,
+                         _DIST_STYLE["constant"]["color"], "--", "s", "Constant")
+        ax.axvline(N_PANELS, color="#949494", ls=":", lw=1.2,
+                   label=rf"Baseline $N={N_PANELS}$")
+        ax.plot([], [], ls="none", marker="x", color="#444",
+                label="Not converged")
+        ax.set_xlabel(r"$N_\mathrm{panels}$ [-]")
+        ax.set_ylabel(r"Normalised compute time $\hat{t}$ [-]")
+        ax.set_ylim(0, 1.05); ax.legend(fontsize=9); ax.grid(True)
+        fig.tight_layout(); save_fig("Sens_Disc_d2_time_vs_N")
+
+    # ── Accuracy vs cost scatter — cosine AND constant (non-conv flagged) ─
+    if has_timing:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        for N_v, err_CT, t_hat, conv, dist in [
+                (N_vals_cos, err_CT_cos, t_hat_cos, conv_cos, "cosine"),
+                (N_vals_con, err_CT_con, t_hat_con, conv_con, "constant")]:
+            st = _DIST_STYLE[dist]
+            N_v = np.asarray(N_v)
+            valid = ~np.isnan(err_CT)
+            # Converged + valid: filled markers
+            m_cv = valid & conv
+            ax.scatter(t_hat[m_cv], err_CT[m_cv],
+                       color=st["color"], marker=st["marker"],
+                       s=80, zorder=3, edgecolors="#444", linewidths=0.5,
+                       label=st["label_prefix"])
+            # Non-converged + valid: hollow markers with X
+            m_nc = valid & (~conv)
+            if m_nc.any():
+                ax.scatter(t_hat[m_nc], err_CT[m_nc],
+                           facecolors="white", edgecolors=st["color"],
+                           marker=st["marker"], s=80, linewidths=1.5, zorder=3)
+                ax.scatter(t_hat[m_nc], err_CT[m_nc],
+                           color=st["color"], marker="x", s=50,
+                           linewidths=1.5, zorder=4)
+            for xi, yi, Ni in zip(t_hat[valid], err_CT[valid], N_v[valid]):
+                ax.annotate(str(int(Ni)), (xi, yi),
+                            textcoords="offset points", xytext=(5, 4),
+                            fontsize=7, color="#333")
+        # Highlight baselines (only if converged)
+        for dist in ["cosine", "constant"]:
+            N_v = N_vals_cos if dist == "cosine" else N_vals_con
+            t_h = t_hat_cos  if dist == "cosine" else t_hat_con
+            err = err_CT_cos if dist == "cosine" else err_CT_con
+            st  = _DIST_STYLE[dist]
+            if N_PANELS in N_v:
+                idx_b = list(N_v).index(N_PANELS)
+                ax.scatter([t_h[idx_b]], [err[idx_b]],
+                           color=st["color"], marker="*",
+                           s=200, zorder=5,
+                           label=rf"Baseline {st['label_prefix']} $N={N_PANELS}$")
+        ax.plot([], [], ls="none", marker="x", color="#444",
+                label="Not converged")
+        ax.set_xlabel(r"Normalised compute time $\hat{t}$ [-]")
+        ax.set_ylabel(r"$\epsilon_{C_T}$ rel. to finest converged cosine [%]")
+        ax.set_yscale("log"); ax.legend(fontsize=8); ax.grid(True, which="both")
+        fig.tight_layout(); save_fig("Sens_Disc_e1_accuracy_vs_cost_CT")
+
+    # ── Combined dual-axis: error + time vs N — cosine AND constant ───────
+    if has_timing:
+        fig, ax1 = plt.subplots(figsize=(8, 5))
+        ax2 = ax1.twinx()
+        _plot_conv_split(ax1, N_vals_cos, err_CT_cos, conv_cos,
+                         _DIST_STYLE["cosine"]["color"],   "-", "o",
+                         r"$\epsilon_{C_T}$ cosine", logy=True)
+        _plot_conv_split(ax1, N_vals_con, err_CT_con, conv_con,
+                         _DIST_STYLE["constant"]["color"], "-", "s",
+                         r"$\epsilon_{C_T}$ constant", logy=True)
+        l3, = ax2.plot(N_vals_cos, t_hat_cos, "o--",
+                       color=_DIST_STYLE["cosine"]["color"],   lw=1.5, alpha=0.5,
+                       label=r"$\hat{t}$ cosine")
+        l4, = ax2.plot(N_vals_con, t_hat_con, "s--",
+                       color=_DIST_STYLE["constant"]["color"], lw=1.5, alpha=0.5,
+                       label=r"$\hat{t}$ constant")
+        ax1.axvline(N_PANELS, color="#949494", ls=":", lw=1.5,
+                    label=rf"Baseline $N={N_PANELS}$")
+        ax1.axvline(N_ref_conv, color="#444", ls="-.", lw=1.2,
+                    label=rf"Reference $N={N_ref_conv}$")
+        ax1.plot([], [], ls="none", marker="x", color="#444",
+                 label="Not converged")
+        ax1.set_xlabel(r"$N_\mathrm{panels}$ [-]")
+        ax1.set_ylabel(r"$\epsilon_{C_T}$ relative error [%]")
+        ax2.set_ylabel(r"Normalised compute time $\hat{t}$ [-]")
+        ax2.set_ylim(0, 1.15)
+        ax1.legend(fontsize=7, loc="upper right")
+        ax1.grid(True, which="both")
+        fig.tight_layout(); save_fig("Sens_Disc_e2_combined_error_time_vs_N")
 
 elif PLOT_SENS_DISC:
     _skip("PLOT_SENS_DISC", "discretisation sensitivity data missing")
@@ -1135,7 +1412,12 @@ elif PLOT_SENS_DISC:
 # =============================================================================
 
 if PLOT_SENS_DPSI and sens_dpsi_data:
-    n_dpsi = len(SENS_DPSI_LIST)
+    n_dpsi    = len(SENS_DPSI_LIST)
+    dpsi_vals = SENS_DPSI_LIST
+    ct_vals   = np.array([sens_dpsi_data[d][1] for d in dpsi_vals])
+    cp_vals   = np.array([sens_dpsi_data[d][2] for d in dpsi_vals])
+
+    # ── Spanwise distributions ────────────────────────────────────────────
     for qty_col, ylabel, fname in [
             (0, r"$a$ [-]",
              "Sens_DPSI_a_axial_induction"),
@@ -1151,19 +1433,108 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
         ax.legend(fontsize=8); ax.grid(True)
         fig.tight_layout(); save_fig(fname)
 
-    dpsi_vals = SENS_DPSI_LIST
-    ct_vals   = [sens_dpsi_data[d][1] for d in dpsi_vals]
-    cp_vals   = [sens_dpsi_data[d][2] for d in dpsi_vals]
-
+    # ── CT convergence vs dpsi ────────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(dpsi_vals, ct_vals, "o-", color="#0173b2", lw=2)
-    ax.set_xlabel(r"$\Delta\psi$ [deg]"); ax.set_ylabel(r"$C_T$ [-]"); ax.grid(True)
+    ax.axvline(DPSI_DEG, color="#949494", ls="--", lw=1.2,
+               label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
+    ax.set_xlabel(r"$\Delta\psi$ [deg]")
+    ax.set_ylabel(r"$C_T$ [-]"); ax.legend(fontsize=9); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_DPSI_c1_CT_vs_dpsi")
 
+    # ── CP convergence vs dpsi ────────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(dpsi_vals, cp_vals, "o-", color="#029e73", lw=2)
-    ax.set_xlabel(r"$\Delta\psi$ [deg]"); ax.set_ylabel(r"$C_P$ [-]"); ax.grid(True)
+    ax.axvline(DPSI_DEG, color="#949494", ls="--", lw=1.2,
+               label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
+    ax.set_xlabel(r"$\Delta\psi$ [deg]")
+    ax.set_ylabel(r"$C_P$ [-]"); ax.legend(fontsize=9); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_DPSI_c2_CP_vs_dpsi")
+
+    # ── Accuracy and timing arrays ────────────────────────────────────────
+    # Reference = finest dpsi (smallest step = most accurate)
+    ct_ref_dpsi = ct_vals[0];  cp_ref_dpsi = cp_vals[0]
+    err_CT_dpsi = np.abs(ct_vals - ct_ref_dpsi) / ct_ref_dpsi * 100.0
+    err_CP_dpsi = np.abs(cp_vals - cp_ref_dpsi) / cp_ref_dpsi * 100.0
+    err_CT_dpsi = np.where(err_CT_dpsi == 0, np.nan, err_CT_dpsi)
+    err_CP_dpsi = np.where(err_CP_dpsi == 0, np.nan, err_CP_dpsi)
+
+    t_dpsi     = np.array([timing_dpsi.get(d, 0.0) for d in dpsi_vals])
+    t_max_dpsi = t_dpsi.max() if t_dpsi.max() > 0 else 1.0
+    t_hat_dpsi = t_dpsi / t_max_dpsi
+
+    # ── Relative error vs dpsi (log scale) ───────────────────────────────
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.semilogy(dpsi_vals, err_CT_dpsi, "o-", color="#0173b2", lw=2,
+                label=r"$\epsilon_{C_T}$ [%]")
+    ax.semilogy(dpsi_vals, err_CP_dpsi, "s-", color="#029e73", lw=2,
+                label=r"$\epsilon_{C_P}$ [%]")
+    ax.axvline(DPSI_DEG, color="#949494", ls="--", lw=1.2,
+               label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
+    ax.set_xlabel(r"$\Delta\psi$ [deg]")
+    ax.set_ylabel(r"Relative error w.r.t. finest case [%]")
+    ax.legend(fontsize=9); ax.grid(True, which="both")
+    fig.tight_layout(); save_fig("Sens_DPSI_d1_error_vs_dpsi")
+
+    # ── Normalised compute time vs dpsi ──────────────────────────────────
+    if t_dpsi.max() > 0:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.plot(dpsi_vals, t_hat_dpsi, "o-", color="#de8f05", lw=2)
+        ax.axvline(DPSI_DEG, color="#949494", ls="--", lw=1.2,
+                   label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
+        ax.set_xlabel(r"$\Delta\psi$ [deg]")
+        ax.set_ylabel(r"Normalised compute time $\hat{t}$ [-]")
+        ax.set_ylim(0, 1.05); ax.legend(fontsize=9); ax.grid(True)
+        fig.tight_layout(); save_fig("Sens_DPSI_d2_time_vs_dpsi")
+
+    # ── Accuracy vs cost scatter (CT error) ───────────────────────────────
+    if t_dpsi.max() > 0:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        sc = ax.scatter(t_hat_dpsi, err_CT_dpsi,
+                        c=dpsi_vals, cmap="plasma_r",
+                        s=80, zorder=3,
+                        edgecolors="#444", linewidths=0.5)
+        for xi, yi, di in zip(t_hat_dpsi, err_CT_dpsi, dpsi_vals):
+            if not np.isnan(yi):
+                ax.annotate(f"{di:g}°", (xi, yi),
+                            textcoords="offset points", xytext=(5, 4),
+                            fontsize=8, color="#333")
+        # Highlight baseline
+        idx_base_d = dpsi_vals.index(DPSI_DEG) if DPSI_DEG in dpsi_vals else None
+        if idx_base_d is not None:
+            ax.scatter([t_hat_dpsi[idx_base_d]], [err_CT_dpsi[idx_base_d]],
+                       s=140, color="#d55e00", zorder=5,
+                       label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
+            ax.legend(fontsize=9)
+        cbar = fig.colorbar(sc, ax=ax)
+        cbar.set_label(r"$\Delta\psi$ [deg]", fontsize=10)
+        ax.set_xlabel(r"Normalised compute time $\hat{t}$ [-]")
+        ax.set_ylabel(r"$\epsilon_{C_T}$ relative to finest case [%]")
+        ax.set_yscale("log"); ax.grid(True, which="both")
+        fig.tight_layout(); save_fig("Sens_DPSI_e1_accuracy_vs_cost_CT")
+
+    # ── Combined dual-axis: error + time vs dpsi ─────────────────────────
+    if t_dpsi.max() > 0:
+        fig, ax1 = plt.subplots(figsize=(8, 5))
+        ax2 = ax1.twinx()
+        l1, = ax1.semilogy(dpsi_vals, err_CT_dpsi, "o-", color="#0173b2",
+                           lw=2, label=r"$\epsilon_{C_T}$ [%]")
+        l2, = ax1.semilogy(dpsi_vals, err_CP_dpsi, "s-", color="#029e73",
+                           lw=2, label=r"$\epsilon_{C_P}$ [%]")
+        l3, = ax2.plot(dpsi_vals, t_hat_dpsi, "^--", color="#de8f05",
+                       lw=2, label=r"Normalised time $\hat{t}$")
+        vl  = ax1.axvline(DPSI_DEG, color="#949494", ls=":", lw=1.5)
+        ax1.set_xlabel(r"$\Delta\psi$ [deg]")
+        ax1.set_ylabel(r"Relative error [%]")
+        ax2.set_ylabel(r"Normalised compute time $\hat{t}$ [-]")
+        ax2.set_ylim(0, 1.15)
+        lines  = [l1, l2, l3, vl]
+        labels = [r"$\epsilon_{C_T}$ [%]", r"$\epsilon_{C_P}$ [%]",
+                  r"Norm. time $\hat{t}$",
+                  rf"Baseline $\Delta\psi={DPSI_DEG}°$"]
+        ax1.legend(lines, labels, fontsize=9, loc="upper left")
+        ax1.grid(True, which="both")
+        fig.tight_layout(); save_fig("Sens_DPSI_e2_combined_error_time_vs_dpsi")
 
 elif PLOT_SENS_DPSI:
     _skip("PLOT_SENS_DPSI", "azimuthal step sensitivity data missing")
@@ -1194,7 +1565,7 @@ if PLOT_SENS_WAKE and sens_wake_data:
              "Sens_Wake_a_axial_induction"),
             (3, r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$ [-]",
              "Sens_Wake_b_normal_loading")]:
-        fig, ax = plt.subplots(figsize=(9, 5))
+        fig, ax = plt.subplots(figsize=(8, 5))
         for idx, nw in enumerate(SENS_NWAKE_LIST):
             res, CT, CP = sens_wake_data[nw]
             y = res[:, qty_col] / norm_val if qty_col == 3 else res[:, qty_col]
