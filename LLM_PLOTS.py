@@ -331,7 +331,7 @@ fig.tight_layout(); _savefig("4_3d_BEMvsLL_azimuthal_loading_Ct_vs_rR")
 # ---------------------------------------------------------------------------
 
 # ── Fig 4.4-A: LL only — CT vs λ (4..12) ──────────────────────────────────
-fig, ax = plt.subplots(figsize=(9, 5))
+fig, ax = plt.subplots(figsize=(8, 5))
 ax.plot(ll_tsrs_perf, ll_CT_perf, "o-", color=_CB[0], lw=2, ms=5)
 for tsr in TSR_SPAN:
     if tsr in ll_CT_span:
@@ -345,7 +345,7 @@ ax.legend(fontsize=9); ax.grid(True)
 fig.tight_layout(); _savefig("4_4a_LL_CT_vs_TSR")
 
 # ── Fig 4.4-B: LL only — CP vs λ (4..12) ──────────────────────────────────
-fig, ax = plt.subplots(figsize=(9, 5))
+fig, ax = plt.subplots(figsize=(8, 5))
 ax.plot(ll_tsrs_perf, ll_CP_perf, "o-", color=_CB[2], lw=2, ms=5)
 ax.axhline(16/27, color="grey", ls=":", lw=1.2, label="Betz limit")
 for tsr in TSR_SPAN:
@@ -360,7 +360,7 @@ ax.legend(fontsize=9); ax.grid(True)
 fig.tight_layout(); _savefig("4_4b_LL_CP_vs_TSR")
 
 # ── Fig 4.4-C: BEM vs LL — CT comparison ────────────────────────────────────
-fig, ax = plt.subplots(figsize=(9, 5))
+fig, ax = plt.subplots(figsize=(8, 5))
 ax.plot(ll_tsrs_perf,  ll_CT_perf,  "o-", color=_CB[0], lw=2, ms=5, label="LLM")
 ax.plot(bem_tsrs_perf, bem_CT_perf, "s--",color="k", lw=2, ms=5, label="BEM")
 ax.set_xlabel(r"Tip-speed ratio $\lambda$ [-]")
@@ -370,7 +370,7 @@ ax.legend(); ax.grid(True)
 fig.tight_layout(); _savefig("4_4c_BEMvsLL_CT_vs_TSR")
 
 # ── Fig 4.4-D: BEM vs LL — CP comparison ────────────────────────────────────
-fig, ax = plt.subplots(figsize=(9, 5))
+fig, ax = plt.subplots(figsize=(8, 5))
 ax.plot(ll_tsrs_perf,  ll_CP_perf,  "o-", color=_CB[2], lw=2, ms=5, label="LLM")
 ax.plot(bem_tsrs_perf, bem_CP_perf, "s--",color="k", lw=2, ms=5, label="BEM")
 ax.axhline(16/27, color="grey", ls=":", lw=1.2, label="Betz limit")
