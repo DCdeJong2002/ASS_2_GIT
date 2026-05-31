@@ -1521,7 +1521,7 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
             res, CT, CP = sens_dpsi_data[dpsi]
             y = res[:, qty_col] / norm_val if qty_col == 3 else res[:, qty_col]
             ax.plot(res[:, 2], y, color=_sens_color(idx, n_dpsi), lw=2,
-                    label=rf"$\Delta\psi={dpsi}°$  $C_T={CT:.3f}$")
+                    label=rf"$\Delta\psi={dpsi}^\circ$  $C_T={CT:.3f}$")
             x_list.append(res[:, 2])
             y_list.append(y)
         ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
@@ -1539,7 +1539,7 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(dpsi_vals, ct_vals, "o-", color="#0173b2", lw=2)
     ax.axvline(DPSI_DEG, color="#949494", ls="--", lw=1.2,
-               label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
+               label=rf"Baseline $\Delta\psi={DPSI_DEG}^\circ$")
     ax.set_xlabel(r"$\Delta\psi$ [deg]")
     ax.set_ylabel(r"$C_T$ [-]"); ax.legend(fontsize=font_size_big); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_DPSI_c1_CT_vs_dpsi")
@@ -1547,7 +1547,7 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(dpsi_vals, cp_vals, "o-", color="#029e73", lw=2)
     ax.axvline(DPSI_DEG, color="#949494", ls="--", lw=1.2,
-               label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
+               label=rf"Baseline $\Delta\psi={DPSI_DEG}^\circ$")
     ax.set_xlabel(r"$\Delta\psi$ [deg]")
     ax.set_ylabel(r"$C_P$ [-]"); ax.legend(fontsize=font_size_big); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_DPSI_c2_CP_vs_dpsi")
@@ -1568,7 +1568,7 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
     ax.semilogy(dpsi_vals, err_CP_dpsi, "s-", color="#029e73", lw=2,
                 label=r"$\epsilon_{C_P}$ [%]")
     ax.axvline(DPSI_DEG, color="#949494", ls="--", lw=1.2,
-               label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
+               label=rf"Baseline $\Delta\psi={DPSI_DEG}^\circ$")
     ax.set_xlabel(r"$\Delta\psi$ [deg]")
     ax.set_ylabel(r"Relative error w.r.t. finest case [%]")
     ax.legend(fontsize=font_size_big); ax.grid(True, which="both")
@@ -1578,7 +1578,7 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
         fig, ax = plt.subplots(figsize=(8, 5))
         ax.plot(dpsi_vals, t_hat_dpsi, "o-", color="#de8f05", lw=2)
         ax.axvline(DPSI_DEG, color="#949494", ls="--", lw=1.2,
-                   label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
+                   label=rf"Baseline $\Delta\psi={DPSI_DEG}^\circ$")
         ax.set_xlabel(r"$\Delta\psi$ [deg]")
         ax.set_ylabel(r"Normalised compute time $\hat{t}$ [-]")
         ax.set_ylim(0, 1.05); ax.legend(fontsize=font_size_big); ax.grid(True)
@@ -1599,7 +1599,7 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
         if idx_base_d is not None:
             ax.scatter([t_hat_dpsi[idx_base_d]], [err_CT_dpsi[idx_base_d]],
                        s=140, color="#d55e00", zorder=5,
-                       label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
+                       label=rf"Baseline $\Delta\psi={DPSI_DEG}^\circ$")
             ax.legend(fontsize=font_size_big)
         cbar = fig.colorbar(sc, ax=ax)
         cbar.set_label(r"$\Delta\psi$ [deg]", fontsize=10)
@@ -1625,7 +1625,7 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
         lines  = [l1, l2, l3, vl]
         labels = [r"$\epsilon_{C_T}$ [%]", r"$\epsilon_{C_P}$ [%]",
                   r"Norm. time $\hat{t}$",
-                  rf"Baseline $\Delta\psi={DPSI_DEG}°$"]
+                  rf"Baseline $\Delta\psi={DPSI_DEG}^\circ$"]
         ax1.legend(lines, labels, fontsize=font_size_big, loc="upper left")
         ax1.grid(True, which="both")
         fig.tight_layout(); save_fig("Sens_DPSI_e2_combined_error_time_vs_dpsi")
