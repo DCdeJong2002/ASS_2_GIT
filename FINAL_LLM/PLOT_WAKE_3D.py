@@ -2,8 +2,13 @@
 VortexGeometry.py  —  AE4135 Rotor/Wake Aerodynamics, Assignment 2
 Interactive 3-D visualisation of the frozen vortex wake geometry.
 
+Authors: Douwe de Jong (5313899), Martijn van Leeuwen (5614422)
+================================================================
+Self-contained script that plots the 3D vortex wake geometry plots
+used in the report.
+
 Run:  python VortexGeometry.py
-      Outputs (all written to the same directory as this script):
+      Outputs (all written to LLM_3D_plots\):
 
       vortex_geometry_report.pdf          single-panel publication figure
       vortex_geometry_comp_dpsi.pdf       3-panel Δψ comparison
@@ -11,7 +16,6 @@ Run:  python VortexGeometry.py
       vortex_geometry_comp_nwake.pdf      3-panel N_wake comparison
       *.html variants                     interactive Plotly (if toggle = True)
 
-Requires:  numpy  plotly  matplotlib  seaborn
 """
 
 import os
@@ -26,10 +30,10 @@ from matplotlib.lines import Line2D
 import seaborn as sns
 
 # =============================================================================
-# CONFIGURATION  —  edit here
+# CONFIGURATION 
 # =============================================================================
 
-# ── Rotor (must match LiftingLine_FINAL.py) ───────────────────────────────────
+# ── Rotor ───────────────────────────────────
 Radius         = 50.0
 NBlades        = 3
 U0             = 10.0

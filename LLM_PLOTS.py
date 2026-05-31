@@ -1,18 +1,18 @@
 """
-PLOTTING_COMBINED.py  —  AE4135 Rotor/Wake Aerodynamics, Assignment 2
+LLM_PLOTS.py  —  AE4135 Rotor/Wake Aerodynamics, Assignment 2
 BEM vs Lifting Line comparison + LL sensitivity study plots.
 
 Authors: Douwe de Jong (5313899), Martijn van Leeuwen (5614422)
 ================================================================
 Loads:
     bem_results.npz      — from BEM_FINAL.py
-    LLM_results.npz      — from LiftingLine_FINAL.py
+    LLM_results.npz      — from LLM_FINAL.py
 
 Produces all plots for:
     Chapter 4  — LL results + BEM/LL comparison
     Chapter 5  — LL sensitivity study
 
-Run:  python PLOTTING_COMBINED.py
+Run:  python LLM_PLOTS.py
 """
 
 import os
@@ -89,7 +89,7 @@ B = np.load(BEM_NPZ, allow_pickle=False)
 
 print(f"Loading LL  results  → {LL_NPZ}")
 if not os.path.exists(LL_NPZ):
-    sys.exit(f"  ERROR: {LL_NPZ} not found. Run LiftingLine_FINAL.py first.")
+    sys.exit(f"  ERROR: {LL_NPZ} not found. Run LLM_FINAL.py first.")
 L = np.load(LL_NPZ, allow_pickle=False)
 
 # ── BEM per-TSR arrays --------------------------------------------------------

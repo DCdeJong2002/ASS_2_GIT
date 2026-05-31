@@ -1,13 +1,23 @@
 """
-LiftingLine_FINAL.py  —  AE4135 Rotor/Wake Aerodynamics, Assignment 2
+LLM_FINAL.py  —  AE4135 Rotor/Wake Aerodynamics, Assignment 2
 Frozen Vortex Wake / Lifting Line model for the DU95W180 wind turbine rotor.
 
 Authors: Douwe de Jong (5313899), Martijn van Leeuwen (5614422)
 ================================================================
 Self-contained script producing all required plots and saving
-results to ll_results.npz for use with PLOTTING_LL_FINAL.py.
+results to ll_results.npz for use with PLOTTING_LLM_FINAL.py.
 
-Run:  python LiftingLine_FINAL.py
+The plots are saved to LLM_plots/ as PDF files. Furthermore, the 
+most important numerical results are saved as tables in LLM_tables/ as PDF files.
+
+There are toggles to turn on and off certain parts of the code.
+The code optionally saves the final results to a .npz file which
+can be used in a standalone plotting script (PLOTTING_LLM_FINAL.py).
+
+The plotting script (PLOTTING_LLM_FINAL.py) also produces the plots that
+compare the LLM results to BEM results.
+
+Run:  python LLM_FINAL.py
 """
 
 import os, sys, time
@@ -23,7 +33,7 @@ warnings.filterwarnings("ignore")
 # 0.  CONFIGURATION
 # =============================================================================
 
-# ── Rotor geometry (identical to BEM Assignment) ─────────────────────────────
+# ── Rotor geometry ─────────────────────────────
 Radius         = 50.0
 NBlades        = 3
 U0             = 10.0
@@ -102,14 +112,19 @@ polar_cd    = _df["Cd"].to_numpy()
 # 2.  GLOBAL STYLE  &  COLOR SCHEME
 # =============================================================================
 
+# ── Font size tiers (single source of truth for legends/annotations) ──
+font_size_small  = 10    # crowded legends, dense scatter annotations
+font_size_medium = 11    # standard legends, in-axes notes
+font_size_big    = 12    # default legends, flow-direction labels
+
 mpl.rcParams.update({
     "text.usetex"       : False,
     "font.family"       : "serif",
     "font.serif"        : ["CMU Serif", "Computer Modern Roman",
                            "Latin Modern Roman", "DejaVu Serif"],
     "mathtext.fontset"  : "cm",
-    "axes.labelsize"    : 12,
-    "legend.fontsize"   : 10,
+    "axes.labelsize"    : 14,
+    "legend.fontsize"   : 12,
     "xtick.labelsize"   : 10,
     "ytick.labelsize"   : 10,
     "axes.titlesize"    : 12,
@@ -299,7 +314,7 @@ def assemble_influence_matrix(controlpoints, rings):
     return A_u, A_v, A_w
 
 # =============================================================================
-# 7.  CIRCULATION SOLVER  (Aitken dynamic relaxation)
+# 7.  CIRCULATION SOLVER  
 # =============================================================================
 
 def solve_circulation(A_u, A_v, A_w, controlpoints, Omega,
@@ -503,7 +518,7 @@ def run_case(TSR, N=N_PANELS, N_wake=N_WAKE, dpsi_deg=DPSI_DEG,
 # 11.  SAVE / SHOW HELPER
 # =============================================================================
 
-LL_RESULTS_PATH = "LLM_results.npz"
+LL_RESULTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LLM_results.npz")
 
 save_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "LLM_plots")
@@ -588,7 +603,7 @@ def _annotate_increasing_direction(ax, x_data_list, y_data_list,
         )
         x_mid   = 0.5 * (x_tail + x_head)
         y_label = y_level + 0.04 * y_range
-        ax.text(x_mid, y_label, label, fontsize=9, color=color,
+        ax.text(x_mid, y_label, label, fontsize=font_size_big, color=color,
                 va="bottom", ha="center",
                 bbox=dict(boxstyle="round,pad=0.2", fc="white",
                           ec=color, alpha=0.75, lw=0.8))
@@ -644,7 +659,7 @@ def _annotate_increasing_direction(ax, x_data_list, y_data_list,
 
     y_mid   = 0.5 * (y_tail + y_head)
     x_label = x_arrow + 0.03 * (ax.get_xlim()[1] - ax.get_xlim()[0])
-    ax.text(x_label, y_mid, label, fontsize=9, color=color,
+    ax.text(x_label, y_mid, label, fontsize=font_size_big, color=color,
             va="center", ha="left",
             bbox=dict(boxstyle="round,pad=0.2", fc="white",
                       ec=color, alpha=0.75, lw=0.8))
@@ -876,7 +891,7 @@ sens_wake_data  = {}
 
 timing_disc  = {}
 timing_dpsi  = {}
-timing_wake  = {}   # nw -> float seconds  [NEW]
+timing_wake  = {}   
 
 print(f"\nWake convection mode: {'ITERATED a_w' if USE_ITERATED_AW else f'FIXED a_w = {A_WAKE}'}")
 
@@ -946,7 +961,7 @@ if RUN_SENS_AZIMUTHAL:
         timing_dpsi[dpsi] = time.perf_counter() - _t0
         sens_dpsi_data[dpsi] = (res, CT, CP)
 
-# ── Sensitivity: wake length  (now with timing) ───────────────────────────────
+# ── Sensitivity: wake length ───────────────────────────────
 if RUN_SENS_WAKE_LENGTH:
     print("\n" + "="*60)
     print(f"Running sensitivity: wake length (TSR={SENS_TSR}) ...")
@@ -959,7 +974,6 @@ if RUN_SENS_WAKE_LENGTH:
 
 # =============================================================================
 # 13.  PLOTS — LL.1  (inflow angle φ and AoA α)
-#      Annotate with direction arrow showing increasing λ
 # =============================================================================
 
 n_span = len(TSR_SWEEP_SPAN)
@@ -1097,7 +1111,7 @@ if PLOT_SENS_AW and sens_aw_data:
                    label=rf"Self-consistent $a_w = {sc_aw:.3f}$")
     ax.set_xlabel(r"Wake convection induction $a_w$ [-]")
     ax.set_ylabel(r"$C_T$ [-]")
-    ax.legend(fontsize=9); ax.grid(True)
+    ax.legend(fontsize=font_size_big); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_AW_1_CT_vs_aw")
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -1109,7 +1123,7 @@ if PLOT_SENS_AW and sens_aw_data:
                    label=rf"Self-consistent $a_w = {sc_aw:.3f}$")
     ax.set_xlabel(r"Wake convection induction $a_w$ [-]")
     ax.set_ylabel(r"$C_P$ [-]")
-    ax.legend(fontsize=9); ax.grid(True)
+    ax.legend(fontsize=font_size_big); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_AW_2_CP_vs_aw")
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -1122,7 +1136,7 @@ if PLOT_SENS_AW and sens_aw_data:
                    label=rf"Self-consistent $a_w = {sc_aw:.3f}$")
         ax.scatter([sc_aw], [sc_aw], color="#029e73", s=70, zorder=5)
     ax.set_xlabel(r"Input $a_w$ [-]"); ax.set_ylabel(r"$\bar{a}$ [-]")
-    ax.legend(fontsize=9); ax.grid(True)
+    ax.legend(fontsize=font_size_big); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_AW_3_mean_a_vs_aw")
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -1132,7 +1146,7 @@ if PLOT_SENS_AW and sens_aw_data:
         ax.axvline(sc_aw, color="#029e73", ls=":", lw=2,
                    label=rf"Zero crossing $a_w = {sc_aw:.3f}$")
         ax.scatter([sc_aw], [0.0], color="#029e73", s=70, zorder=5)
-        ax.legend(fontsize=9)
+        ax.legend(fontsize=font_size_big)
     ax.set_xlabel(r"Input $a_w$ [-]")
     ax.set_ylabel(r"Residual $\bar{a} - a_w$ [-]")
     ax.grid(True)
@@ -1160,7 +1174,7 @@ if PLOT_SENS_AW and sens_aw_data:
             x_list.append(res[:, 2])
             y_list.append(y)
         ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
-        ax.legend(fontsize=8, bbox_to_anchor=(1.01, 1), loc="upper left")
+        ax.legend(fontsize=font_size_medium, bbox_to_anchor=(1.01, 1), loc="upper left")
         ax.grid(True)
         fig.tight_layout()
         # Direction and placement are data-driven per quantity:
@@ -1202,7 +1216,7 @@ if PLOT_SENS_DISC and sens_disc_data:
         ax.plot(res[:, 2], res[:, 3] / norm_val, color=_sens_color(idx, n_N), lw=2,
                 label=rf"N={N}  $C_T={CT:.3f}$")
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_n$ [-]")
-    ax.legend(fontsize=8); ax.grid(True)
+    ax.legend(fontsize=font_size_medium); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_a1_Cn_panel_count_cosine")
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -1212,7 +1226,7 @@ if PLOT_SENS_DISC and sens_disc_data:
         ax.plot(res[:, 2], res[:, 0], color=_sens_color(idx, n_N), lw=2,
                 label=rf"N={N}  $C_P={CP:.3f}$")
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$a$ [-]")
-    ax.legend(fontsize=8); ax.grid(True)
+    ax.legend(fontsize=font_size_medium); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_a2_a_panel_count_cosine")
 
     N_ref = N_PANELS
@@ -1224,7 +1238,7 @@ if PLOT_SENS_DISC and sens_disc_data:
                 color=st["color"], lw=2, ls=st["ls"],
                 label=rf"{st['label_prefix']}  $C_T={CT:.3f}$")
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$C_n$ [-]")
-    ax.legend(fontsize=8); ax.grid(True)
+    ax.legend(fontsize=font_size_medium); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_b1_Cn_cosine_vs_constant")
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -1235,7 +1249,7 @@ if PLOT_SENS_DISC and sens_disc_data:
                 color=st["color"], lw=2, ls=st["ls"],
                 label=rf"{st['label_prefix']}  $C_P={CP:.3f}$")
     ax.set_xlabel("r/R"); ax.set_ylabel(r"$a$ [-]")
-    ax.legend(fontsize=8); ax.grid(True)
+    ax.legend(fontsize=font_size_medium); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_b2_a_cosine_vs_constant")
 
     _CMP_N = [N for N in (5, 20, 70) if (N, "cosine") in sens_disc_data
@@ -1280,10 +1294,10 @@ if PLOT_SENS_DISC and sens_disc_data:
                     ymin = 0.9 * float(np.min(y_tip))
                     ymax = 1.1 * float(np.max(y_tip))
                     ax.set_ylim(ymin, ymax)
-            ax.legend(fontsize=8, loc="upper left")
+            ax.legend(fontsize=font_size_medium, loc="upper left")
             ax.text(0.02, 0.02,
                     "Shaded band: constant $>$ cosine\n(over-predicted loading)",
-                    transform=ax.transAxes, fontsize=8, va="bottom", ha="left",
+                    transform=ax.transAxes, fontsize=font_size_medium, va="bottom", ha="left",
                     bbox=dict(boxstyle="round,pad=0.3", fc="white",
                               ec="#949494", alpha=0.85))
             fig.tight_layout(); save_fig(fname)
@@ -1356,7 +1370,7 @@ if PLOT_SENS_DISC and sens_disc_data:
     ax.plot([], [], ls="none", marker="x", color="#444",
             label="Not converged")
     ax.set_xlabel(r"$N_\mathrm{panels}$ [-]")
-    ax.set_ylabel(r"$C_T$ [-]"); ax.legend(fontsize=9); ax.grid(True)
+    ax.set_ylabel(r"$C_T$ [-]"); ax.legend(fontsize=font_size_big); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_c1_CT_convergence_vs_N")
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -1369,7 +1383,7 @@ if PLOT_SENS_DISC and sens_disc_data:
     ax.plot([], [], ls="none", marker="x", color="#444",
             label="Not converged")
     ax.set_xlabel(r"$N_\mathrm{panels}$ [-]")
-    ax.set_ylabel(r"$C_P$ [-]"); ax.legend(fontsize=9); ax.grid(True)
+    ax.set_ylabel(r"$C_P$ [-]"); ax.legend(fontsize=font_size_big); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Disc_c2_CP_convergence_vs_N")
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -1388,12 +1402,12 @@ if PLOT_SENS_DISC and sens_disc_data:
     ax.axvline(N_PANELS, color="#949494", ls=":", lw=1.2,
                label=rf"Baseline $N={N_PANELS}$")
     ax.axvline(N_ref_conv, color="#444", ls="-.", lw=1.2,
-               label=rf"Reference (finest converged) $N={N_ref_conv}$")
+               label=rf"Reference $N={N_ref_conv}$")
     ax.plot([], [], ls="none", marker="x", color="#444",
             label="Not converged")
     ax.set_xlabel(r"$N_\mathrm{panels}$ [-]")
     ax.set_ylabel(r"Relative error w.r.t. finest converged cosine [%]")
-    ax.legend(fontsize=7); ax.grid(True, which="both")
+    ax.legend(fontsize=font_size_small); ax.grid(True, which="both")
     fig.tight_layout(); save_fig("Sens_Disc_d1_error_vs_N")
 
     if has_timing:
@@ -1408,7 +1422,7 @@ if PLOT_SENS_DISC and sens_disc_data:
                 label="Not converged")
         ax.set_xlabel(r"$N_\mathrm{panels}$ [-]")
         ax.set_ylabel(r"Normalised compute time $\hat{t}$ [-]")
-        ax.set_ylim(0, 1.05); ax.legend(fontsize=9); ax.grid(True)
+        ax.set_ylim(0, 1.05); ax.legend(fontsize=font_size_big); ax.grid(True)
         fig.tight_layout(); save_fig("Sens_Disc_d2_time_vs_N")
 
     if has_timing:
@@ -1435,7 +1449,7 @@ if PLOT_SENS_DISC and sens_disc_data:
             for xi, yi, Ni in zip(t_hat[valid], err_CT[valid], N_v[valid]):
                 ax.annotate(str(int(Ni)), (xi, yi),
                             textcoords="offset points", xytext=(5, 4),
-                            fontsize=7, color="#333")
+                            fontsize=font_size_small, color="#333")
         for dist in ["cosine", "constant"]:
             N_v = N_vals_cos if dist == "cosine" else N_vals_con
             t_h = t_hat_cos  if dist == "cosine" else t_hat_con
@@ -1451,7 +1465,7 @@ if PLOT_SENS_DISC and sens_disc_data:
                 label="Not converged")
         ax.set_xlabel(r"Normalised compute time $\hat{t}$ [-]")
         ax.set_ylabel(r"$\epsilon_{C_T}$ rel. to finest converged cosine [%]")
-        ax.set_yscale("log"); ax.legend(fontsize=8); ax.grid(True, which="both")
+        ax.set_yscale("log"); ax.legend(fontsize=font_size_medium); ax.grid(True, which="both")
         fig.tight_layout(); save_fig("Sens_Disc_e1_accuracy_vs_cost_CT")
 
     if has_timing:
@@ -1479,7 +1493,7 @@ if PLOT_SENS_DISC and sens_disc_data:
         ax1.set_ylabel(r"$\epsilon_{C_T}$ relative error [%]")
         ax2.set_ylabel(r"Normalised compute time $\hat{t}$ [-]")
         ax2.set_ylim(0, 1.15)
-        ax1.legend(fontsize=7, loc="upper right")
+        ax1.legend(fontsize=font_size_small, loc="upper right")
         ax1.grid(True, which="both")
         fig.tight_layout(); save_fig("Sens_Disc_e2_combined_error_time_vs_N")
 
@@ -1511,11 +1525,9 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
             x_list.append(res[:, 2])
             y_list.append(y)
         ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
-        ax.legend(fontsize=8); ax.grid(True)
+        ax.legend(fontsize=font_size_small, bbox_to_anchor=(1.01, 1), loc="upper left"); ax.grid(True)
         fig.tight_layout()
         if fname == "Sens_DPSI_b_normal_loading":
-            # y_pos=0.48: just below the flat mid-span bundle (r/R~0.34)
-            # where all curves are nearly identical and clear space exists below
             _annotate_increasing_direction(
                 ax, x_list, y_list,
                 label=r"increasing $\Delta\psi$",
@@ -1529,7 +1541,7 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
     ax.axvline(DPSI_DEG, color="#949494", ls="--", lw=1.2,
                label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
     ax.set_xlabel(r"$\Delta\psi$ [deg]")
-    ax.set_ylabel(r"$C_T$ [-]"); ax.legend(fontsize=9); ax.grid(True)
+    ax.set_ylabel(r"$C_T$ [-]"); ax.legend(fontsize=font_size_big); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_DPSI_c1_CT_vs_dpsi")
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -1537,7 +1549,7 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
     ax.axvline(DPSI_DEG, color="#949494", ls="--", lw=1.2,
                label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
     ax.set_xlabel(r"$\Delta\psi$ [deg]")
-    ax.set_ylabel(r"$C_P$ [-]"); ax.legend(fontsize=9); ax.grid(True)
+    ax.set_ylabel(r"$C_P$ [-]"); ax.legend(fontsize=font_size_big); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_DPSI_c2_CP_vs_dpsi")
 
     ct_ref_dpsi = ct_vals[0];  cp_ref_dpsi = cp_vals[0]
@@ -1559,7 +1571,7 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
                label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
     ax.set_xlabel(r"$\Delta\psi$ [deg]")
     ax.set_ylabel(r"Relative error w.r.t. finest case [%]")
-    ax.legend(fontsize=9); ax.grid(True, which="both")
+    ax.legend(fontsize=font_size_big); ax.grid(True, which="both")
     fig.tight_layout(); save_fig("Sens_DPSI_d1_error_vs_dpsi")
 
     if t_dpsi.max() > 0:
@@ -1569,7 +1581,7 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
                    label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
         ax.set_xlabel(r"$\Delta\psi$ [deg]")
         ax.set_ylabel(r"Normalised compute time $\hat{t}$ [-]")
-        ax.set_ylim(0, 1.05); ax.legend(fontsize=9); ax.grid(True)
+        ax.set_ylim(0, 1.05); ax.legend(fontsize=font_size_big); ax.grid(True)
         fig.tight_layout(); save_fig("Sens_DPSI_d2_time_vs_dpsi")
 
     if t_dpsi.max() > 0:
@@ -1582,13 +1594,13 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
             if not np.isnan(yi):
                 ax.annotate(f"{di:g}°", (xi, yi),
                             textcoords="offset points", xytext=(5, 4),
-                            fontsize=8, color="#333")
+                            fontsize=font_size_medium, color="#333")
         idx_base_d = dpsi_vals.index(DPSI_DEG) if DPSI_DEG in dpsi_vals else None
         if idx_base_d is not None:
             ax.scatter([t_hat_dpsi[idx_base_d]], [err_CT_dpsi[idx_base_d]],
                        s=140, color="#d55e00", zorder=5,
                        label=rf"Baseline $\Delta\psi={DPSI_DEG}°$")
-            ax.legend(fontsize=9)
+            ax.legend(fontsize=font_size_big)
         cbar = fig.colorbar(sc, ax=ax)
         cbar.set_label(r"$\Delta\psi$ [deg]", fontsize=10)
         ax.set_xlabel(r"Normalised compute time $\hat{t}$ [-]")
@@ -1614,7 +1626,7 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
         labels = [r"$\epsilon_{C_T}$ [%]", r"$\epsilon_{C_P}$ [%]",
                   r"Norm. time $\hat{t}$",
                   rf"Baseline $\Delta\psi={DPSI_DEG}°$"]
-        ax1.legend(lines, labels, fontsize=9, loc="upper left")
+        ax1.legend(lines, labels, fontsize=font_size_big, loc="upper left")
         ax1.grid(True, which="both")
         fig.tight_layout(); save_fig("Sens_DPSI_e2_combined_error_time_vs_dpsi")
 
@@ -1633,7 +1645,6 @@ if PLOT_SENS_WAKE and sens_wake_data:
     ct_arr  = np.array(ct_vals)
     cp_arr  = np.array(cp_vals)
 
-    # Convergence threshold annotation (same as original)
     _ct_ref = ct_vals[-1]
     _cp_ref = cp_vals[-1]
     _conv_tol = 0.005
@@ -1660,17 +1671,15 @@ if PLOT_SENS_WAKE and sens_wake_data:
         ax.text(0.97, 0.97,
                 rf"$C_T$ converged at $N_{{wake}}={_nw_conv_CT}$" + "\n"
                 + rf"$C_P$ converged at $N_{{wake}}={_nw_conv_CP}$",
-                transform=ax.transAxes, fontsize=8,
+                transform=ax.transAxes, fontsize=font_size_medium,
                 va="top", ha="right",
                 bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="#949494",
                           alpha=0.85))
         ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
-        ax.legend(fontsize=7, bbox_to_anchor=(1.01, 1), loc="upper left")
+        ax.legend(fontsize=font_size_small, bbox_to_anchor=(1.01, 1), loc="upper left")
         ax.grid(True)
         fig.tight_layout()
         if fname == "Sens_Wake_a_axial_induction":
-            # x_pos=0.51: clean mid-span position, avoids root spike and
-            # the convergence text box sitting at top-right
             _annotate_increasing_direction(
                 ax, x_list, y_list,
                 label=r"increasing $N_{wake}$",
@@ -1686,7 +1695,7 @@ if PLOT_SENS_WAKE and sens_wake_data:
                label=rf"Converged at $N_{{wake}}={_nw_conv_CT}$")
     ax.axhline(_ct_ref, color="#949494", ls=":", lw=1.0)
     ax.set_xlabel(r"Wake length $N_{wake}$ [rotations]")
-    ax.set_ylabel(r"$C_T$ [-]"); ax.legend(fontsize=9); ax.grid(True)
+    ax.set_ylabel(r"$C_T$ [-]"); ax.legend(fontsize=font_size_big); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Wake_c1_CT_convergence_vs_Nwake")
 
     # ── CP convergence vs N_wake ──────────────────────────────────────────
@@ -1696,11 +1705,11 @@ if PLOT_SENS_WAKE and sens_wake_data:
                label=rf"Converged at $N_{{wake}}={_nw_conv_CP}$")
     ax.axhline(_cp_ref, color="#949494", ls=":", lw=1.0)
     ax.set_xlabel(r"Wake length $N_{wake}$ [rotations]")
-    ax.set_ylabel(r"$C_P$ [-]"); ax.legend(fontsize=9); ax.grid(True)
+    ax.set_ylabel(r"$C_P$ [-]"); ax.legend(fontsize=font_size_big); ax.grid(True)
     fig.tight_layout(); save_fig("Sens_Wake_c2_CP_convergence_vs_Nwake")
 
     # =========================================================================
-    # NEW: Relative error, normalised time, accuracy-vs-cost, combined
+    # Relative error, normalised time, accuracy-vs-cost, combined
     # Reference = finest N_wake (longest wake = most accurate)
     # =========================================================================
 
@@ -1709,7 +1718,7 @@ if PLOT_SENS_WAKE and sens_wake_data:
     cp_ref_wake = cp_arr[-1]
     err_CT_wake = np.abs(ct_arr - ct_ref_wake) / abs(ct_ref_wake) * 100.0
     err_CP_wake = np.abs(cp_arr - cp_ref_wake) / abs(cp_ref_wake) * 100.0
-    # Zero out the reference point (suppress in log plot)
+    # Zero out the reference point 
     err_CT_wake = np.where(err_CT_wake == 0.0, np.nan, err_CT_wake)
     err_CP_wake = np.where(err_CP_wake == 0.0, np.nan, err_CP_wake)
 
@@ -1731,7 +1740,7 @@ if PLOT_SENS_WAKE and sens_wake_data:
                label=rf"Reference $N_{{wake}}={nw_vals[-1]}$")
     ax.set_xlabel(r"Wake length $N_{wake}$ [rotations]")
     ax.set_ylabel(r"Relative error w.r.t. longest wake [%]")
-    ax.legend(fontsize=9); ax.grid(True, which="both")
+    ax.legend(fontsize=font_size_big); ax.grid(True, which="both")
     fig.tight_layout(); save_fig("Sens_Wake_d1_error_vs_Nwake")
 
     # ── d2: Normalised compute time vs N_wake ─────────────────────────────
@@ -1742,7 +1751,7 @@ if PLOT_SENS_WAKE and sens_wake_data:
                    label=rf"Baseline $N_{{wake}}={N_WAKE}$")
         ax.set_xlabel(r"Wake length $N_{wake}$ [rotations]")
         ax.set_ylabel(r"Normalised compute time $\hat{t}$ [-]")
-        ax.set_ylim(0, 1.05); ax.legend(fontsize=9); ax.grid(True)
+        ax.set_ylim(0, 1.05); ax.legend(fontsize=font_size_big); ax.grid(True)
         fig.tight_layout(); save_fig("Sens_Wake_d2_time_vs_Nwake")
 
     # ── e1: Accuracy vs cost scatter (CT error) ────────────────────────────
@@ -1756,14 +1765,14 @@ if PLOT_SENS_WAKE and sens_wake_data:
             if not np.isnan(yi):
                 ax.annotate(str(int(nwi)), (xi, yi),
                             textcoords="offset points", xytext=(5, 4),
-                            fontsize=8, color="#333")
+                            fontsize=font_size_medium, color="#333")
         # Highlight baseline
         if N_WAKE in nw_vals:
             idx_base_nw = nw_vals.index(N_WAKE)
             ax.scatter([t_hat_wake[idx_base_nw]], [err_CT_wake[idx_base_nw]],
                        s=180, color="#d55e00", zorder=5,
                        label=rf"Baseline $N_{{wake}}={N_WAKE}$")
-            ax.legend(fontsize=9)
+            ax.legend(fontsize=font_size_big)
         cbar = fig.colorbar(sc, ax=ax)
         cbar.set_label(r"$N_{wake}$ [rotations]", fontsize=10)
         ax.set_xlabel(r"Normalised compute time $\hat{t}$ [-]")
@@ -1790,7 +1799,7 @@ if PLOT_SENS_WAKE and sens_wake_data:
         labels = [r"$\epsilon_{C_T}$ [%]", r"$\epsilon_{C_P}$ [%]",
                   r"Norm. time $\hat{t}$",
                   rf"Baseline $N_{{wake}}={N_WAKE}$"]
-        ax1.legend(lines, labels, fontsize=9, loc="upper right")
+        ax1.legend(lines, labels, fontsize=font_size_big, loc="upper right")
         ax1.grid(True, which="both")
         fig.tight_layout(); save_fig("Sens_Wake_e2_combined_error_time_vs_Nwake")
 

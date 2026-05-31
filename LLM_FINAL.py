@@ -7,6 +7,16 @@ Authors: Douwe de Jong (5313899), Martijn van Leeuwen (5614422)
 Self-contained script producing all required plots and saving
 results to ll_results.npz for use with PLOTTING_LLM_FINAL.py.
 
+The plots are saved to LLM_plots/ as PDF files. Furthermore, the 
+most important numerical results are saved as tables in LLM_tables/ as PDF files.
+
+There are toggles to turn on and off certain parts of the code.
+The code optionally saves the final results to a .npz file which
+can be used in a standalone plotting script (PLOTTING_LLM_FINAL.py).
+
+The plotting script (PLOTTING_LLM_FINAL.py) also produces the plots that
+compare the LLM results to BEM results.
+
 Run:  python LLM_FINAL.py
 """
 
@@ -503,7 +513,7 @@ def run_case(TSR, N=N_PANELS, N_wake=N_WAKE, dpsi_deg=DPSI_DEG,
 # 11.  SAVE / SHOW HELPER
 # =============================================================================
 
-LL_RESULTS_PATH = "LLM_results.npz"
+LL_RESULTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LLM_results.npz")
 
 save_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                            "LLM_plots")
@@ -876,7 +886,7 @@ sens_wake_data  = {}
 
 timing_disc  = {}
 timing_dpsi  = {}
-timing_wake  = {}   # nw -> float seconds  [NEW]
+timing_wake  = {}   
 
 print(f"\nWake convection mode: {'ITERATED a_w' if USE_ITERATED_AW else f'FIXED a_w = {A_WAKE}'}")
 
@@ -946,7 +956,7 @@ if RUN_SENS_AZIMUTHAL:
         timing_dpsi[dpsi] = time.perf_counter() - _t0
         sens_dpsi_data[dpsi] = (res, CT, CP)
 
-# ── Sensitivity: wake length  (now with timing) ───────────────────────────────
+# ── Sensitivity: wake length ───────────────────────────────
 if RUN_SENS_WAKE_LENGTH:
     print("\n" + "="*60)
     print(f"Running sensitivity: wake length (TSR={SENS_TSR}) ...")
@@ -959,7 +969,6 @@ if RUN_SENS_WAKE_LENGTH:
 
 # =============================================================================
 # 13.  PLOTS — LL.1  (inflow angle φ and AoA α)
-#      Annotate with direction arrow showing increasing λ
 # =============================================================================
 
 n_span = len(TSR_SWEEP_SPAN)
@@ -1514,8 +1523,6 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
         ax.legend(fontsize=8); ax.grid(True)
         fig.tight_layout()
         if fname == "Sens_DPSI_b_normal_loading":
-            # y_pos=0.48: just below the flat mid-span bundle (r/R~0.34)
-            # where all curves are nearly identical and clear space exists below
             _annotate_increasing_direction(
                 ax, x_list, y_list,
                 label=r"increasing $\Delta\psi$",
@@ -1633,7 +1640,6 @@ if PLOT_SENS_WAKE and sens_wake_data:
     ct_arr  = np.array(ct_vals)
     cp_arr  = np.array(cp_vals)
 
-    # Convergence threshold annotation (same as original)
     _ct_ref = ct_vals[-1]
     _cp_ref = cp_vals[-1]
     _conv_tol = 0.005
@@ -1669,8 +1675,6 @@ if PLOT_SENS_WAKE and sens_wake_data:
         ax.grid(True)
         fig.tight_layout()
         if fname == "Sens_Wake_a_axial_induction":
-            # x_pos=0.51: clean mid-span position, avoids root spike and
-            # the convergence text box sitting at top-right
             _annotate_increasing_direction(
                 ax, x_list, y_list,
                 label=r"increasing $N_{wake}$",
@@ -1700,7 +1704,7 @@ if PLOT_SENS_WAKE and sens_wake_data:
     fig.tight_layout(); save_fig("Sens_Wake_c2_CP_convergence_vs_Nwake")
 
     # =========================================================================
-    # NEW: Relative error, normalised time, accuracy-vs-cost, combined
+    # Relative error, normalised time, accuracy-vs-cost, combined
     # Reference = finest N_wake (longest wake = most accurate)
     # =========================================================================
 
@@ -1709,7 +1713,7 @@ if PLOT_SENS_WAKE and sens_wake_data:
     cp_ref_wake = cp_arr[-1]
     err_CT_wake = np.abs(ct_arr - ct_ref_wake) / abs(ct_ref_wake) * 100.0
     err_CP_wake = np.abs(cp_arr - cp_ref_wake) / abs(cp_ref_wake) * 100.0
-    # Zero out the reference point (suppress in log plot)
+    # Zero out the reference point 
     err_CT_wake = np.where(err_CT_wake == 0.0, np.nan, err_CT_wake)
     err_CP_wake = np.where(err_CP_wake == 0.0, np.nan, err_CP_wake)
 
