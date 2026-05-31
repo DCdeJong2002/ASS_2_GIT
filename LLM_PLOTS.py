@@ -31,7 +31,7 @@ warnings.filterwarnings("ignore")
 _HERE        = os.path.dirname(os.path.abspath(__file__))
 BEM_NPZ      = os.path.join(_HERE, "bem_results.npz")
 LL_NPZ       = os.path.join(_HERE, "LLM_results.npz")
-OUT_DIR      = os.path.join(_HERE, "combined_plots")
+OUT_DIR      = os.path.join(_HERE, "LLM_combined_plots")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # =============================================================================

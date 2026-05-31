@@ -20,9 +20,9 @@ warnings.filterwarnings("ignore")
 # =============================================================================
 
 _HERE        = os.path.dirname(os.path.abspath(__file__))
-LL_NPZ_ITER  = os.path.join(_HERE, "LLM_results_iter.npz")
+LL_NPZ_ITER  = os.path.join(_HERE, "LLM_results_iterative_aw.npz")
 LL_NPZ_FIXED = os.path.join(_HERE, "LLM_results.npz")
-OUT_DIR      = os.path.join(_HERE, "LLM_plots_standalone")
+OUT_DIR      = os.path.join(_HERE, "LLM_iter_aw_plots")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 SHOW_PLOTS = False

@@ -533,41 +533,91 @@ norm_val = 0.5 * rho * U0**2 * Radius
 
 def _annotate_increasing_direction(ax, x_data_list, y_data_list,
                                    label="increasing", color="#333333",
-                                   margin_frac=0.08):
-    """Place a double-headed annotation arrow showing the direction in which
-    curves shift as the parameter increases.
-
-    The arrow is placed at the r/R position where the spread between the
-    first and last curve is largest (most visually unambiguous), then nudged
-    away from the curve bundle to avoid overlap.
+                                   margin_frac=0.08, force_direction=None,
+                                   x_pos=None, y_pos=None):
+    """Place a single-headed arrow showing the direction in which curves shift
+    as the parameter increases.
 
     Parameters
     ----------
-    ax            : Axes to annotate
-    x_data_list   : list of 1-D arrays, one per curve (r/R values)
-    y_data_list   : list of 1-D arrays, one per curve (quantity values)
-    label         : text to place beside the arrow
-    color         : arrow and text colour
-    margin_frac   : fraction of y-axis range to offset the annotation
+    ax               : Axes to annotate
+    x_data_list      : list of 1-D arrays, one per curve (r/R values)
+    y_data_list      : list of 1-D arrays, one per curve (quantity values)
+    label            : text to place beside the arrow
+    color            : arrow and text colour
+    margin_frac      : fraction of axis range to offset the annotation
+    force_direction  : None (auto-detect from data), 'up', 'down', or 'left'.
+                       'left' draws a horizontal arrow along the x-axis instead.
+    x_pos            : manual r/R position for the vertical arrow (overrides
+                       auto-detection); ignored for 'left' arrows.
+    y_pos            : manual y position for the horizontal arrow y_level
+                       (overrides auto-detection); ignored for vertical arrows.
     """
     if len(y_data_list) < 2:
         return
 
-    # Common r/R grid: use the first curve's grid
-    x_ref = x_data_list[0]
+    # ── Horizontal (left) arrow — drawn at a fixed y position ────────────
+    if force_direction == 'left':
+        ax_xmin, ax_xmax = ax.get_xlim()
+        ax_ymin, ax_ymax = ax.get_ylim()
+        x_range = ax_xmax - ax_xmin
+        y_range = ax_ymax - ax_ymin
+
+        if y_pos is not None:
+            y_level = float(y_pos)
+        else:
+            # Find the x position of maximum spread to anchor the y level
+            x_ref   = x_data_list[0]
+            y_first = y_data_list[0]
+            y_last  = np.interp(x_ref, x_data_list[-1], y_data_list[-1])
+            spread  = np.abs(y_last - y_first)
+            idx_max = int(np.argmax(spread))
+            y_level = float(y_first[idx_max])
+            # Nudge y_level away from axes edges
+            y_level = float(np.clip(y_level,
+                                    ax_ymin + 0.08 * y_range,
+                                    ax_ymax - 0.08 * y_range))
+
+        # Arrow spans most of the x axis
+        x_tail = ax_xmax - 0.05 * x_range
+        x_head = ax_xmin + 0.05 * x_range
+
+        ax.annotate(
+            "", xy=(x_head, y_level), xytext=(x_tail, y_level),
+            arrowprops=dict(arrowstyle="->", color=color, lw=1.5),
+        )
+        x_mid   = 0.5 * (x_tail + x_head)
+        y_label = y_level + 0.04 * y_range
+        ax.text(x_mid, y_label, label, fontsize=9, color=color,
+                va="bottom", ha="center",
+                bbox=dict(boxstyle="round,pad=0.2", fc="white",
+                          ec=color, alpha=0.75, lw=0.8))
+        return
+
+    # ── Vertical arrow ────────────────────────────────────────────────────
+    x_ref   = x_data_list[0]
     y_first = y_data_list[0]
     y_last  = np.interp(x_ref, x_data_list[-1], y_data_list[-1])
 
-    spread = np.abs(y_last - y_first)
-    idx_max = int(np.argmax(spread))
+    spread  = np.abs(y_last - y_first)
+    if x_pos is not None:
+        # Snap to the nearest data point to the requested r/R
+        idx_max = int(np.argmin(np.abs(x_ref - x_pos)))
+    else:
+        idx_max = int(np.argmax(spread))
     x_arrow = float(x_ref[idx_max])
 
-    # y-midpoints of first and last curve at that r/R
     y0 = float(y_first[idx_max])
     y1 = float(y_last[idx_max])
 
-    # Determine direction
-    direction_up = y1 > y0
+    # Auto-detect or override direction
+    if force_direction == 'up':
+        direction_up = True
+    elif force_direction == 'down':
+        direction_up = False
+    else:
+        direction_up = y1 > y0
+
     y_low  = min(y0, y1)
     y_high = max(y0, y1)
 
@@ -576,24 +626,22 @@ def _annotate_increasing_direction(ax, x_data_list, y_data_list,
     offset  = margin_frac * y_range
 
     if direction_up:
-        y_tail  = y_low  - offset
-        y_head  = y_high + offset
+        y_tail = y_low  - offset
+        y_head = y_high + offset
     else:
-        y_tail  = y_high + offset
-        y_head  = y_low  - offset
+        y_tail = y_high + offset
+        y_head = y_low  - offset
 
-    # Clamp to axes limits with a small guard
-    guard = 0.02 * y_range
+    guard  = 0.02 * y_range
     y_tail = float(np.clip(y_tail, ax_ymin + guard, ax_ymax - guard))
     y_head = float(np.clip(y_head, ax_ymin + guard, ax_ymax - guard))
 
-    # Arrow drawn from tail to head
+    # Single-headed arrow: tail -> head
     ax.annotate(
         "", xy=(x_arrow, y_head), xytext=(x_arrow, y_tail),
-        arrowprops=dict(arrowstyle="<->", color=color, lw=1.5),
+        arrowprops=dict(arrowstyle="->", color=color, lw=1.5),
     )
 
-    # Label placed at the midpoint, offset slightly to the right
     y_mid   = 0.5 * (y_tail + y_head)
     x_label = x_arrow + 0.03 * (ax.get_xlim()[1] - ax.get_xlim()[0])
     ax.text(x_label, y_mid, label, fontsize=9, color=color,
@@ -921,28 +969,18 @@ if PLOT_LL_1 and sweep_data_span:
             (7, r"$\phi$ [deg]",   "LL_1a_inflow_angle_vs_rR"),
             (6, r"$\alpha$ [deg]", "LL_1b_angle_of_attack_vs_rR")]:
         fig, ax = plt.subplots(figsize=(8, 5))
-        x_list, y_list = [], []
         for k, TSR in enumerate(TSR_SWEEP_SPAN):
             res = sweep_data_span[TSR]
             ax.plot(res[:, 2], res[:, qty_col], color=_tsr_color(k, n_span), lw=2,
                     label=rf"$\lambda={TSR}$")
-            x_list.append(res[:, 2])
-            y_list.append(res[:, qty_col])
         ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
         ax.legend(); ax.grid(True)
-        fig.tight_layout()
-        # Annotation: direction of increasing λ
-        _annotate_increasing_direction(
-            ax, x_list, y_list,
-            label=r"increasing $\lambda$",
-            color="#555555")
-        save_fig(fname)
+        fig.tight_layout(); save_fig(fname)
 elif PLOT_LL_1:
     _skip("PLOT_LL_1", "span sweep data missing")
 
 # =============================================================================
 # 14.  PLOTS — LL.2  (induction factors)
-#      Annotate with direction arrow showing increasing λ
 # =============================================================================
 
 if PLOT_LL_2 and sweep_data_span:
@@ -950,22 +988,13 @@ if PLOT_LL_2 and sweep_data_span:
             (0, r"$a$ [-]",  "LL_2a_axial_induction_vs_rR"),
             (1, r"$a'$ [-]", "LL_2b_tangential_induction_vs_rR")]:
         fig, ax = plt.subplots(figsize=(8, 5))
-        x_list, y_list = [], []
         for k, TSR in enumerate(TSR_SWEEP_SPAN):
             res = sweep_data_span[TSR]
             ax.plot(res[:, 2], res[:, qty_col], color=_tsr_color(k, n_span), lw=2,
                     label=rf"$\lambda={TSR}$")
-            x_list.append(res[:, 2])
-            y_list.append(res[:, qty_col])
         ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
         ax.legend(); ax.grid(True)
-        fig.tight_layout()
-        # Annotation: direction of increasing λ
-        _annotate_increasing_direction(
-            ax, x_list, y_list,
-            label=r"increasing $\lambda$",
-            color="#555555")
-        save_fig(fname)
+        fig.tight_layout(); save_fig(fname)
 elif PLOT_LL_2:
     _skip("PLOT_LL_2", "span sweep data missing")
 
@@ -1119,6 +1148,7 @@ if PLOT_SENS_AW and sens_aw_data:
             (7, r"$\phi$ [deg]",
              "Sens_AW_8_inflow_angle_vs_rR",       False)]:
         fig, ax = plt.subplots(figsize=(9, 5))
+        x_list, y_list = [], []
         for idx, a_w in enumerate(SENS_AW_LIST):
             res, CT, CP = sens_aw_data[a_w]
             y = res[:, qty_col] / norm_val if qty_col == 3 else res[:, qty_col]
@@ -1127,10 +1157,26 @@ if PLOT_SENS_AW and sens_aw_data:
             else:
                 lbl = rf"$a_w={a_w:.2f}$  $C_T={CT:.3f}$"
             ax.plot(res[:, 2], y, color=_sens_color(idx, n_aw), lw=1.8, label=lbl)
+            x_list.append(res[:, 2])
+            y_list.append(y)
         ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
         ax.legend(fontsize=8, bbox_to_anchor=(1.01, 1), loc="upper left")
         ax.grid(True)
-        fig.tight_layout(); save_fig(fname)
+        fig.tight_layout()
+        # Direction and placement are data-driven per quantity:
+        #   a (col 0):   UP   x_pos=0.26  (root, largest spread)
+        #   Gamma (col 5): DOWN x_pos=0.39
+        #   Cn (col 3):  DOWN x_pos=0.75  (mid-outboard)
+        #   phi (col 7): DOWN x_pos=0.26
+        _aw_dir  = 'up'   if qty_col == 0 else 'down'
+        _aw_xpos = {0: 0.26, 5: 0.39, 3: 0.75, 7: 0.26}.get(qty_col, None)
+        _annotate_increasing_direction(
+            ax, x_list, y_list,
+            label=r"increasing $a_w$",
+            color="#555555",
+            force_direction=_aw_dir,
+            x_pos=_aw_xpos)
+        save_fig(fname)
 
 elif PLOT_SENS_AW:
     _skip("PLOT_SENS_AW", "convection speed sensitivity data missing")
@@ -1456,14 +1502,27 @@ if PLOT_SENS_DPSI and sens_dpsi_data:
             (3, r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$ [-]",
              "Sens_DPSI_b_normal_loading")]:
         fig, ax = plt.subplots(figsize=(8, 5))
+        x_list, y_list = [], []
         for idx, dpsi in enumerate(SENS_DPSI_LIST):
             res, CT, CP = sens_dpsi_data[dpsi]
             y = res[:, qty_col] / norm_val if qty_col == 3 else res[:, qty_col]
             ax.plot(res[:, 2], y, color=_sens_color(idx, n_dpsi), lw=2,
                     label=rf"$\Delta\psi={dpsi}°$  $C_T={CT:.3f}$")
+            x_list.append(res[:, 2])
+            y_list.append(y)
         ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
         ax.legend(fontsize=8); ax.grid(True)
-        fig.tight_layout(); save_fig(fname)
+        fig.tight_layout()
+        if fname == "Sens_DPSI_b_normal_loading":
+            # y_pos=0.48: just below the flat mid-span bundle (r/R~0.34)
+            # where all curves are nearly identical and clear space exists below
+            _annotate_increasing_direction(
+                ax, x_list, y_list,
+                label=r"increasing $\Delta\psi$",
+                color="#555555",
+                force_direction='left',
+                y_pos=0.48)
+        save_fig(fname)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     ax.plot(dpsi_vals, ct_vals, "o-", color="#0173b2", lw=2)
@@ -1590,11 +1649,14 @@ if PLOT_SENS_WAKE and sens_wake_data:
             (3, r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$ [-]",
              "Sens_Wake_b_normal_loading")]:
         fig, ax = plt.subplots(figsize=(8, 5))
+        x_list, y_list = [], []
         for idx, nw in enumerate(SENS_NWAKE_LIST):
             res, CT, CP = sens_wake_data[nw]
             y = res[:, qty_col] / norm_val if qty_col == 3 else res[:, qty_col]
             ax.plot(res[:, 2], y, color=_sens_color(idx, n_nw), lw=2,
                     label=rf"$N_{{wake}}={nw}$  $C_T={CT:.3f}$  $C_P={CP:.3f}$")
+            x_list.append(res[:, 2])
+            y_list.append(y)
         ax.text(0.97, 0.97,
                 rf"$C_T$ converged at $N_{{wake}}={_nw_conv_CT}$" + "\n"
                 + rf"$C_P$ converged at $N_{{wake}}={_nw_conv_CP}$",
@@ -1605,7 +1667,17 @@ if PLOT_SENS_WAKE and sens_wake_data:
         ax.set_xlabel("r/R"); ax.set_ylabel(ylabel)
         ax.legend(fontsize=7, bbox_to_anchor=(1.01, 1), loc="upper left")
         ax.grid(True)
-        fig.tight_layout(); save_fig(fname)
+        fig.tight_layout()
+        if fname == "Sens_Wake_a_axial_induction":
+            # x_pos=0.51: clean mid-span position, avoids root spike and
+            # the convergence text box sitting at top-right
+            _annotate_increasing_direction(
+                ax, x_list, y_list,
+                label=r"increasing $N_{wake}$",
+                color="#555555",
+                force_direction='up',
+                x_pos=0.51)
+        save_fig(fname)
 
     # ── CT convergence vs N_wake ──────────────────────────────────────────
     fig, ax = plt.subplots(figsize=(8, 5))
