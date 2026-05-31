@@ -215,10 +215,10 @@ ax.legend(); ax.grid(True)
 fig.tight_layout(); _savefig("4_1b_LL_angle_of_attack_vs_rR")
 
 # ── Fig 4.1-C: BEM vs LL — inflow angle (subplots per TSR) ─────────────────
-fig, axes = plt.subplots(1, 3, figsize=(14, 5), sharey=True)
+fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharey=True)
 for ax, tsr in zip(axes, TSR_SPAN):
     col = _TSR_COL[tsr]
-    ax.plot(ll[tsr][:,2],  ll[tsr][:,7],  color=col, lw=2,   ls="-",  label=rf"LL ($\lambda={tsr}$)")
+    ax.plot(ll[tsr][:,2],  ll[tsr][:,7],  color=col, lw=2,   ls="-",  label=rf"LLM ($\lambda={tsr}$)")
     ax.plot(bem[tsr][:,2], bem[tsr][:,7], color="k", lw=2,   ls="--", label=rf"BEM ($\lambda={tsr}$)")
     ax.set_xlabel("r/R")
     ax.legend(fontsize=9); ax.grid(True)
@@ -226,10 +226,10 @@ axes[0].set_ylabel(r"$\phi$ [deg]")
 fig.tight_layout(); _savefig("4_1c_BEMvsLL_inflow_angle_vs_rR")
 
 # ── Fig 4.1-D: BEM vs LL — angle of attack ─────────────────────────────────
-fig, axes = plt.subplots(1, 3, figsize=(14, 5), sharey=True)
+fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharey=True)
 for ax, tsr in zip(axes, TSR_SPAN):
     col = _TSR_COL[tsr]
-    ax.plot(ll[tsr][:,2],  ll[tsr][:,6],  color=col, lw=2, ls="-",  label=rf"LL ($\lambda={tsr}$)")
+    ax.plot(ll[tsr][:,2],  ll[tsr][:,6],  color=col, lw=2, ls="-",  label=rf"LLM ($\lambda={tsr}$)")
     ax.plot(bem[tsr][:,2], bem[tsr][:,6], color="k", lw=2, ls="--", label=rf"BEM ($\lambda={tsr}$)")
     ax.set_xlabel("r/R")
     ax.legend(fontsize=9); ax.grid(True)
@@ -259,10 +259,10 @@ ax.legend(); ax.grid(True)
 fig.tight_layout(); _savefig("4_2b_LL_tangential_induction_vs_rR")
 
 # ── Fig 4.2-C: BEM vs LL — axial induction ─────────────────────────────────
-fig, axes = plt.subplots(1, 3, figsize=(14, 5), sharey=True)
+fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharey=True)
 for ax, tsr in zip(axes, TSR_SPAN):
     col = _TSR_COL[tsr]
-    ax.plot(ll[tsr][:,2],  ll[tsr][:,0],  color=col, lw=2, ls="-",  label=rf"LL ($\lambda={tsr}$)")
+    ax.plot(ll[tsr][:,2],  ll[tsr][:,0],  color=col, lw=2, ls="-",  label=rf"LLM ($\lambda={tsr}$)")
     ax.plot(bem[tsr][:,2], bem[tsr][:,0], color="k", lw=2, ls="--", label=rf"BEM ($\lambda={tsr}$)")
     ax.set_xlabel("r/R")
     ax.legend(fontsize=9); ax.grid(True)
@@ -270,10 +270,10 @@ axes[0].set_ylabel(r"$a$ [-]")
 fig.tight_layout(); _savefig("4_2c_BEMvsLL_axial_induction_vs_rR")
 
 # ── Fig 4.2-D: BEM vs LL — tangential induction ────────────────────────────
-fig, axes = plt.subplots(1, 3, figsize=(14, 5), sharey=True)
+fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharey=True)
 for ax, tsr in zip(axes, TSR_SPAN):
     col = _TSR_COL[tsr]
-    ax.plot(ll[tsr][:,2],  ll[tsr][:,1],  color=col, lw=2, ls="-",  label=rf"LL ($\lambda={tsr}$)")
+    ax.plot(ll[tsr][:,2],  ll[tsr][:,1],  color=col, lw=2, ls="-",  label=rf"LLM ($\lambda={tsr}$)")
     ax.plot(bem[tsr][:,2], bem[tsr][:,1], color="k", lw=2, ls="--", label=rf"BEM ($\lambda={tsr}$)")
     ax.set_xlabel("r/R")
     ax.legend(fontsize=9); ax.grid(True)
@@ -290,7 +290,7 @@ for tsr in TSR_SPAN:
     ax.plot(ll[tsr][:,2], ll[tsr][:,3] / norm_ll,
             color=_TSR_COL[tsr], lw=2, label=rf"$\lambda={tsr}$")
 ax.set_xlabel("r/R")
-ax.set_ylabel(r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$")
+ax.set_ylabel(r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_0^2 R)$")
 ax.legend(); ax.grid(True)
 fig.tight_layout(); _savefig("4_3a_LL_normal_loading_Cn_vs_rR")
 
@@ -300,15 +300,15 @@ for tsr in TSR_SPAN:
     ax.plot(ll[tsr][:,2], ll[tsr][:,4] / norm_ll,
             color=_TSR_COL[tsr], lw=2, label=rf"$\lambda={tsr}$")
 ax.set_xlabel("r/R")
-ax.set_ylabel(r"$C_t = F_t\,/\,(\frac{1}{2}\rho U_\infty^2 R)$")
+ax.set_ylabel(r"$C_t = F_t\,/\,(\frac{1}{2}\rho U_0^2 R)$")
 ax.legend(); ax.grid(True)
 fig.tight_layout(); _savefig("4_3b_LL_azimuthal_loading_Ct_vs_rR")
 
 # ── Fig 4.3-C: BEM vs LL — axial loading ───────────────────────────────────
-fig, axes = plt.subplots(1, 3, figsize=(14, 5), sharey=True)
+fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharey=True)
 for ax, tsr in zip(axes, TSR_SPAN):
     col = _TSR_COL[tsr]
-    ax.plot(ll[tsr][:,2],  ll[tsr][:,3]  / norm_ll,  color=col, lw=2, ls="-",  label=rf"LL ($\lambda={tsr}$)")
+    ax.plot(ll[tsr][:,2],  ll[tsr][:,3]  / norm_ll,  color=col, lw=2, ls="-",  label=rf"LLM ($\lambda={tsr}$)")
     ax.plot(bem[tsr][:,2], bem[tsr][:,3] / norm_bem, color="k", lw=2, ls="--", label=rf"BEM ($\lambda={tsr}$)")
     ax.set_xlabel("r/R")
     ax.legend(fontsize=9); ax.grid(True)
@@ -316,10 +316,10 @@ axes[0].set_ylabel(r"$C_n$ [-]")
 fig.tight_layout(); _savefig("4_3c_BEMvsLL_normal_loading_Cn_vs_rR")
 
 # ── Fig 4.3-D: BEM vs LL — azimuthal loading ───────────────────────────────
-fig, axes = plt.subplots(1, 3, figsize=(14, 5), sharey=True)
+fig, axes = plt.subplots(1, 3, figsize=(14, 4), sharey=True)
 for ax, tsr in zip(axes, TSR_SPAN):
     col = _TSR_COL[tsr]
-    ax.plot(ll[tsr][:,2],  ll[tsr][:,4]  / norm_ll,  color=col, lw=2, ls="-",  label=rf"LL ($\lambda={tsr}$)")
+    ax.plot(ll[tsr][:,2],  ll[tsr][:,4]  / norm_ll,  color=col, lw=2, ls="-",  label=rf"LLM ($\lambda={tsr}$)")
     ax.plot(bem[tsr][:,2], bem[tsr][:,4] / norm_bem, color="k", lw=2, ls="--", label=rf"BEM ($\lambda={tsr}$)")
     ax.set_xlabel("r/R")
     ax.legend(fontsize=9); ax.grid(True)
@@ -361,7 +361,7 @@ fig.tight_layout(); _savefig("4_4b_LL_CP_vs_TSR")
 
 # ── Fig 4.4-C: BEM vs LL — CT comparison ────────────────────────────────────
 fig, ax = plt.subplots(figsize=(9, 5))
-ax.plot(ll_tsrs_perf,  ll_CT_perf,  "o-", color=_CB[0], lw=2, ms=5, label="LL")
+ax.plot(ll_tsrs_perf,  ll_CT_perf,  "o-", color=_CB[0], lw=2, ms=5, label="LLM")
 ax.plot(bem_tsrs_perf, bem_CT_perf, "s--",color="k", lw=2, ms=5, label="BEM")
 ax.set_xlabel(r"Tip-speed ratio $\lambda$ [-]")
 ax.set_ylabel(r"$C_T$ [-]")
@@ -371,7 +371,7 @@ fig.tight_layout(); _savefig("4_4c_BEMvsLL_CT_vs_TSR")
 
 # ── Fig 4.4-D: BEM vs LL — CP comparison ────────────────────────────────────
 fig, ax = plt.subplots(figsize=(9, 5))
-ax.plot(ll_tsrs_perf,  ll_CP_perf,  "o-", color=_CB[2], lw=2, ms=5, label="LL")
+ax.plot(ll_tsrs_perf,  ll_CP_perf,  "o-", color=_CB[2], lw=2, ms=5, label="LLM")
 ax.plot(bem_tsrs_perf, bem_CP_perf, "s--",color="k", lw=2, ms=5, label="BEM")
 ax.axhline(16/27, color="grey", ls=":", lw=1.2, label="Betz limit")
 ax.set_xlabel(r"Tip-speed ratio $\lambda$ [-]")
@@ -403,11 +403,11 @@ for tsr in TSR_SPAN:
     r_R    = ll[tsr][:,2]
     Gamma  = ll[tsr][:,5]
     Omega  = U0 * tsr / Radius
-    N_b    = 3
-    Gamma_hat = Gamma * N_b * Omega / (np.pi * U0**2)
+    B    = 3
+    Gamma_hat = Gamma * B * Omega / (np.pi * U0**2)
     ax.plot(r_R, Gamma_hat, color=_TSR_COL[tsr], lw=2, label=rf"$\lambda={tsr}$")
 ax.set_xlabel("r/R")
-ax.set_ylabel(r"$\hat{\Gamma} = \Gamma\,N_b\,\Omega\,/\,(\pi U_\infty^2)$ [-]")
+ax.set_ylabel(r"$\hat{\Gamma} = \Gamma\,B\,\Omega\,/\,(\pi U_0^2)$ [-]")
 ax.legend(); ax.grid(True)
 fig.tight_layout(); _savefig("4_5_LL_circulation_vs_rR")
 
@@ -443,7 +443,7 @@ if len(sens_aw_vals) > 0:
         ax.plot(_rR(res), _Cn(res), color=_SENS_COL(idx), lw=2,
                 label=rf"$a_w={aw:.2f}$  $C_T={ct_val:.3f}$")
     ax.set_xlabel("r/R")
-    ax.set_ylabel(r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$")
+    ax.set_ylabel(r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_0^2 R)$")
     ax.legend(fontsize=9); ax.grid(True)
     fig.tight_layout(); _savefig("5_1a_sens_aw_normal_loading_vs_rR")
 
@@ -505,7 +505,7 @@ if len(N_vals_avail) >= 2:
               Line2D([0],[0], color="k",    lw=2, ls="--", label=f"N={N_hi}")]
     ax.legend(handles=custom, fontsize=9); ax.grid(True)
     ax.set_xlabel("r/R")
-    ax.set_ylabel(r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$")
+    ax.set_ylabel(r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_0^2 R)$")
     fig.tight_layout(); _savefig("5_2a_sens_disc_normal_loading_Cn_vs_rR")
 
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -553,7 +553,7 @@ if len(sens_dpsi_vals) > 0:
         ax.plot(_rR(res), _Cn(res), color=_SENS_COL(idx), lw=2,
                 label=rf"$\Delta\psi={dp:.0f}°$ ({n_steps} steps)  $C_T={ct_val:.3f}$")
     ax.set_xlabel("r/R")
-    ax.set_ylabel(r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$")
+    ax.set_ylabel(r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_0^2 R)$")
     ax.legend(fontsize=9); ax.grid(True)
     fig.tight_layout(); _savefig("5_3a_sens_dpsi_normal_loading_vs_rR")
 
@@ -599,7 +599,7 @@ if len(sens_nwake_vals) > 0:
         ax.plot(_rR(res), _Cn(res), color=_SENS_COL(idx), lw=2,
                 label=rf"$N_{{wake}}={int(nw)}$  $C_T={ct_val:.3f}$")
     ax.set_xlabel("r/R")
-    ax.set_ylabel(r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_\infty^2 R)$")
+    ax.set_ylabel(r"$C_n = F_n\,/\,(\frac{1}{2}\rho U_0^2 R)$")
     ax.legend(fontsize=9); ax.grid(True)
     fig.tight_layout(); _savefig("5_4a_sens_nwake_normal_loading_vs_rR")
 
