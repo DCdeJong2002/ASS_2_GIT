@@ -1,13 +1,13 @@
 """
-LiftingLine_FINAL.py  —  AE4135 Rotor/Wake Aerodynamics, Assignment 2
+LLM_FINAL.py  —  AE4135 Rotor/Wake Aerodynamics, Assignment 2
 Frozen Vortex Wake / Lifting Line model for the DU95W180 wind turbine rotor.
 
 Authors: Douwe de Jong (5313899), Martijn van Leeuwen (5614422)
 ================================================================
 Self-contained script producing all required plots and saving
-results to ll_results.npz for use with PLOTTING_LL_FINAL.py.
+results to ll_results.npz for use with PLOTTING_LLM_FINAL.py.
 
-Run:  python LiftingLine_FINAL.py
+Run:  python LLM_FINAL.py
 """
 
 import os, sys, time
@@ -23,7 +23,7 @@ warnings.filterwarnings("ignore")
 # 0.  CONFIGURATION
 # =============================================================================
 
-# ── Rotor geometry (identical to BEM Assignment) ─────────────────────────────
+# ── Rotor geometry ─────────────────────────────
 Radius         = 50.0
 NBlades        = 3
 U0             = 10.0
@@ -299,7 +299,7 @@ def assemble_influence_matrix(controlpoints, rings):
     return A_u, A_v, A_w
 
 # =============================================================================
-# 7.  CIRCULATION SOLVER  (Aitken dynamic relaxation)
+# 7.  CIRCULATION SOLVER  
 # =============================================================================
 
 def solve_circulation(A_u, A_v, A_w, controlpoints, Omega,

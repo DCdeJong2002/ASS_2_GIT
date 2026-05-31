@@ -513,7 +513,7 @@ def plot_comparison_nwake():
 # =============================================================================
 # SINGLE-PANEL FIGURES  (unchanged from original)
 # =============================================================================
-'''
+
 def plot_report_figure():
     """Publication-quality single-panel matplotlib PDF."""
     if not SAVE_REPORT_PDF:
@@ -523,9 +523,9 @@ def plot_report_figure():
     cps, rings  = build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w)
     n_pb        = len(cps) // NBlades
 
-    fig     = plt.figure(figsize=(12, 7))
-    ax      = fig.add_axes([0.0, 0.0, 0.77, 1.0], projection='3d')
-    ax_leg  = fig.add_axes([0.76, 0.12, 0.24, 0.76])
+    fig     = plt.figure(figsize=(12, 5.0))
+    ax      = fig.add_axes([-0.03, -0.10, 0.80, 1.20], projection='3d')
+    ax_leg  = fig.add_axes([0.76, 0.10, 0.24, 0.80])
     ax_leg.axis('off')
     fig.patch.set_facecolor('white')
 
@@ -541,42 +541,11 @@ def plot_report_figure():
     leg.get_title().set_fontweight('semibold')
 
     out = _here('vortex_geometry_report.pdf')
-    fig.savefig(out, dpi=300, facecolor='white', edgecolor='none')
+    fig.savefig(out, dpi=300, facecolor='white', edgecolor='none', bbox_inches='tight')
     print(f"Saved  →  {out}")
     plt.close(fig)
     return out
-'''
 
-def plot_report_figure():
-    if not SAVE_REPORT_PDF:
-        return
-    _apply_rcparams(base_fontsize=12)
-    Omega       = U0 * TSR / Radius
-    cps, rings  = build_vortex_system(Omega, N, N_wake, dpsi_deg, a_w)
-    n_pb        = len(cps) // NBlades
-
-    fig     = plt.figure(figsize=(12, 5.5))                              # ← shorter
-    ax      = fig.add_axes([-0.03, -0.08, 0.80, 1.16], projection='3d') # ← bleed to cut dead space
-    ax_leg  = fig.add_axes([0.76, 0.10, 0.24, 0.80])                    # ← adjusted
-    ax_leg.axis('off')
-    fig.patch.set_facecolor('white')
-
-    _draw_wake_on_ax(ax, rings, cps, n_pb, elev=22, azim=118, lw_scale=1.0)
-
-    handles = _legend_handles()
-    leg = ax_leg.legend(handles=handles, loc='center',
-                        framealpha=0.97, edgecolor='#cccccc',
-                        handlelength=2.6, labelspacing=0.55,
-                        title='Vortex wake geometry', title_fontsize=11)
-    leg.get_frame().set_linewidth(0.7)
-    leg.get_title().set_fontweight('semibold')
-
-    out = _here('vortex_geometry_report.pdf')
-    fig.savefig(out, dpi=300, facecolor='white', edgecolor='none',
-                bbox_inches='tight', pad_inches=0.05)               # ← tighter save
-    print(f"Saved  →  {out}")
-    plt.close(fig)
-    return out
 
 def plot_vortex_geometry():
     """Interactive single-panel Plotly HTML."""
